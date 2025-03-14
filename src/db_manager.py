@@ -2,15 +2,11 @@ import sqlite3
 from datetime import datetime
 import re
 from datetime import timedelta
-import sqlite3
-from datetime import datetime
-import re
 import os
 
 class DatabaseManager:
     def __init__(self, db_path="appointments.db"):
         """Initialize database connection and create tables if they don't exist."""
-        # Use absolute path to ensure consistent location
         self.db_path = os.path.abspath(db_path)
         print(f"Using database at: {self.db_path}")
         self.conn = None
@@ -22,7 +18,7 @@ class DatabaseManager:
         """Establish connection to the SQLite database."""
         try:
             self.conn = sqlite3.connect(self.db_path)
-            self.conn.row_factory = sqlite3.Row  # This allows accessing columns by name
+            self.conn.row_factory = sqlite3.Row
             self.cursor = self.conn.cursor()
             print("Database connected successfully")
         except sqlite3.Error as e:
@@ -66,21 +62,17 @@ class DatabaseManager:
             tuple: (success: bool, message: str)
         """
         try:
-            # Ensure connection is active
             if self.conn is None or self.cursor is None:
                 self.connect()
             
-            # Debug output to help diagnose issues
             print(f"Attempting to save appointment: {appointment_data}")
             
-            # Ensure all required fields are present
             required_fields = ["user_name", "date", "time", "email", "appointment_type"]
             if not all(field in appointment_data for field in required_fields):
                 missing = [f for f in required_fields if f not in appointment_data]
                 print(f"Missing required appointment fields: {missing}")
                 return False, f"Missing required fields: {', '.join(missing)}"
             
-            # Check for duplicate appointments
             query = '''
             SELECT COUNT(*) FROM appointments 
             WHERE date = ? AND time = ? AND email = ?
@@ -93,7 +85,6 @@ class DatabaseManager:
             if self.cursor.fetchone()[0] > 0:
                 return False, "You already have an appointment scheduled at this time"
             
-            # Insert appointment into database
             query = '''
             INSERT INTO appointments (user_name, date, time, email, appointment_type)
             VALUES (?, ?, ?, ?, ?)
@@ -106,10 +97,8 @@ class DatabaseManager:
                 appointment_data['appointment_type']
             ))
             
-            # Explicitly commit the changes
             self.conn.commit()
             
-            # Verify the appointment was actually saved
             self.cursor.execute('''
             SELECT COUNT(*) FROM appointments WHERE email = ? AND date = ? AND time = ?
             ''', (
@@ -298,7 +287,6 @@ class DatabaseManager:
         
         return formatted
 
-# Utility functions for processing natural language appointment queries
 def is_appointment_query(text):
     """Check if text is asking about appointments"""
     query_patterns = [
