@@ -1,0 +1,6 @@
+langchain==0.1.5
+langchain-google-genai==0.0.6
+pydantic==2.5.2
+python-dotenv==1.0.0
+sqlalchemy==2.0.25
+streamlit==1.30.0

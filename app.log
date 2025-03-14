@@ -1,0 +1,22 @@
+2025-03-14 03:21:45,685 - __main__ - INFO - API key loaded successfully
+2025-03-14 03:21:45,777 - __main__ - INFO - LLM initialized successfully
+2025-03-14 03:22:09,148 - __main__ - INFO - Processing user input: hi
+2025-03-14 03:22:16,916 - __main__ - INFO - Updated appointment details: {}
+2025-03-14 03:22:16,921 - __main__ - INFO - Collecting info state: False
+2025-03-14 03:22:25,511 - __main__ - INFO - Processing user input: fahim
+2025-03-14 03:22:26,758 - __main__ - INFO - Updated appointment details: {}
+2025-03-14 03:22:26,763 - __main__ - INFO - Collecting info state: False
+2025-03-14 03:22:42,428 - __main__ - INFO - Processing user input: 2/3/2025
+2025-03-14 03:22:44,373 - __main__ - INFO - Updated appointment details: {'date': '2025-02-03'}
+2025-03-14 03:22:44,385 - __main__ - INFO - Collecting info state: False
+2025-03-14 03:22:51,582 - __main__ - INFO - Processing user input: 8pm
+2025-03-14 03:22:53,773 - __main__ - INFO - Updated appointment details: {'date': '2025-03-14'}
+2025-03-14 03:22:53,779 - __main__ - INFO - Collecting info state: False
+2025-03-14 03:23:11,849 - __main__ - INFO - Processing user input: fahimsabir@gmail.com
+2025-03-14 03:23:13,257 - __main__ - INFO - Updated appointment details: {'date': '2025-03-14', 'email': 'fahimsabir@gmail.com'}
+2025-03-14 03:23:13,266 - __main__ - INFO - Collecting info state: False
+2025-03-14 03:23:21,512 - __main__ - INFO - Processing user input: Data Science
+2025-03-14 03:23:23,072 - __main__ - INFO - Updated appointment details: {'date': '2025-03-14', 'email': 'fahimsabir@gmail.com'}
+2025-03-14 03:23:23,085 - __main__ - INFO - Collecting info state: False
+2025-03-14 03:24:08,446 - __main__ - INFO - Viewing appointments for email: fahimsabir@gmail.com
+2025-03-14 03:24:08,480 - __main__ - WARNING - No appointments found for email: fahimsabir@gmail.com
