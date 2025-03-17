@@ -18,7 +18,7 @@ try:
     setup_database()
 except Exception as e:
     print(f"Database initialization error: {str(e)}")
-    if os.path.exists('booking.db'):
+    if os.path.exists('database/booking.db'):
         print("The database file exists but there might be a schema issue. You may need to delete the file and restart.")
 
 @app.route('/')

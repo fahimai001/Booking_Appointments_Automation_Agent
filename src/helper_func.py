@@ -66,14 +66,14 @@ def initialize_llm_chain():
     )
     
     return chain, llm
-
+#Gets a response from the language model based on a given prompt.
 def get_llm_response(llm, prompt_text):
     try:
         return llm.invoke(prompt_text).content
     except Exception as e:
         print(f"Failed to generate message with LLM: {str(e)}")
         return None
-
+#Extracts appointment details from the model's response.
 def parse_appointment_details(response_text):
     details_pattern = r'<APPOINTMENT_DETAILS>(.*?)</APPOINTMENT_DETAILS>'
     match = re.search(details_pattern, response_text, re.DOTALL)
@@ -124,17 +124,19 @@ def parse_appointment_details(response_text):
 def validate_email_format(email):
     email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return bool(re.match(email_pattern, email))
-
+#save new appointment in the database
 def insert_appointment(name, email, date, time, appointment_reason):
-    conn = sqlite3.connect('booking.db')
+    # Ensure data directory exists
+    os.makedirs('database', exist_ok=True)
+    conn = sqlite3.connect('database/booking.db')
     c = conn.cursor()
     c.execute("INSERT INTO booking (name, email, date, time, appointment_reason) VALUES (?, ?, ?, ?, ?)",
               (name, email, date, time, appointment_reason))
     conn.commit()
     conn.close()
-
+#fetch appointment detail from the database
 def fetch_appointments(name=None, email=None, date=None):
-    conn = sqlite3.connect('booking.db')
+    conn = sqlite3.connect('database/booking.db')
     c = conn.cursor()
     
     query = "SELECT * FROM booking"
@@ -162,7 +164,7 @@ def fetch_appointments(name=None, email=None, date=None):
     return appointments
 
 def appointment_exists(name, email, date, time):
-    conn = sqlite3.connect('booking.db')
+    conn = sqlite3.connect('database/booking.db')
     c = conn.cursor()
     
     c.execute("SELECT * FROM booking WHERE name = ? AND email = ? AND date = ? AND time = ?", 
@@ -173,13 +175,13 @@ def appointment_exists(name, email, date, time):
     return result is not None
 
 def fetch_table_columns():
-    conn = sqlite3.connect('booking.db')
+    conn = sqlite3.connect('database/booking.db')
     c = conn.cursor()
     c.execute("PRAGMA table_info(booking)")
     columns = c.fetchall()
     conn.close()
     return [col[1] for col in columns]
-
+#formate and display a list of appointments
 def display_formatted_appointments(appointments, clean_response, llm):
     if not appointments:
         return f"{clean_response}\n\nYou don't have any appointments scheduled."
@@ -301,7 +303,9 @@ def process_chat_message(user_input, llm_chain, llm, session_data=None):
         return f"Error processing message: {str(e)}\n\nPlease try again or restart the application."
 
 def setup_database():
-    conn = sqlite3.connect('booking.db')
+    # Ensure data directory exists
+    os.makedirs('database', exist_ok=True)
+    conn = sqlite3.connect('database/booking.db')
     c = conn.cursor()
     
     c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='booking'")
