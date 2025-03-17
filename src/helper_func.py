@@ -9,6 +9,13 @@ from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.memory import ConversationBufferMemory
 from langchain.schema import HumanMessage, AIMessage
 from langchain.chains import LLMChain
+from src.db import (
+    insert_appointment,
+    fetch_appointments,
+    appointment_exists,
+    fetch_table_columns,
+    setup_database
+)
 
 def initialize_llm_chain():
     api_key = os.environ.get('GEMINI_API_KEY', '')
@@ -66,14 +73,16 @@ def initialize_llm_chain():
     )
     
     return chain, llm
-#Gets a response from the language model based on a given prompt.
+
+# Gets a response from the language model based on a given prompt.
 def get_llm_response(llm, prompt_text):
     try:
         return llm.invoke(prompt_text).content
     except Exception as e:
         print(f"Failed to generate message with LLM: {str(e)}")
         return None
-#Extracts appointment details from the model's response.
+
+# Extracts appointment details from the model's response.
 def parse_appointment_details(response_text):
     details_pattern = r'<APPOINTMENT_DETAILS>(.*?)</APPOINTMENT_DETAILS>'
     match = re.search(details_pattern, response_text, re.DOTALL)
@@ -116,7 +125,6 @@ def parse_appointment_details(response_text):
     if action_extraction:
         details['action'] = action_extraction.group(1).strip()
 
-    
     clean_response = re.sub(details_pattern, '', response_text, flags=re.DOTALL).strip()
     
     return details, clean_response
@@ -124,109 +132,8 @@ def parse_appointment_details(response_text):
 def validate_email_format(email):
     email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return bool(re.match(email_pattern, email))
-#save new appointment in the database
-def insert_appointment(name, email, date, time, appointment_reason):
-    # Ensure data directory exists
-    os.makedirs('database', exist_ok=True)
-    conn = sqlite3.connect('database/booking.db')
-    c = conn.cursor()
-    c.execute("INSERT INTO booking (name, email, date, time, appointment_reason) VALUES (?, ?, ?, ?, ?)",
-              (name, email, date, time, appointment_reason))
-    conn.commit()
-    conn.close()
-#fetch appointment detail from the database
-def fetch_appointments(name=None, email=None, date=None):
-    conn = sqlite3.connect('database/booking.db')
-    c = conn.cursor()
-    
-    query = "SELECT * FROM booking"
-    params = []
-    
-    conditions = []
-    if name:
-        conditions.append("name = ?")
-        params.append(name)
-    if email:
-        conditions.append("email = ?")
-        params.append(email)
-    if date:
-        conditions.append("date = ?")
-        params.append(date)
-    
-    if conditions:
-        query += " WHERE " + " AND ".join(conditions)
-    
-    query += " ORDER BY date, time"
-    
-    c.execute(query, params)
-    appointments = c.fetchall()
-    conn.close()
-    return appointments
-#Checks if a specific appointment already exists.
-def appointment_exists(name, email, date, time):
-    conn = sqlite3.connect('database/booking.db')
-    c = conn.cursor()
-    
-    c.execute("SELECT * FROM booking WHERE name = ? AND email = ? AND date = ? AND time = ?", 
-              (name, email, date, time))
-    result = c.fetchone()
-    
-    conn.close()
-    return result is not None
 
-def fetch_table_columns():
-    conn = sqlite3.connect('database/booking.db')
-    c = conn.cursor()
-    c.execute("PRAGMA table_info(booking)")
-    columns = c.fetchall()
-    conn.close()
-    return [col[1] for col in columns]
-#formate and display a list of appointments
-def display_formatted_appointments(appointments, clean_response, llm):
-    if not appointments:
-        return f"{clean_response}\n\nYou don't have any appointments scheduled."
-    
-    appointments_info = []
-    columns = fetch_table_columns()
-    
-    for appt in appointments:
-        appt_dict = {columns[i]: appt[i] for i in range(len(appt)) if i < len(columns)}
-        appointments_info.append({
-            'date': appt_dict.get('date', 'N/A'),
-            'time': appt_dict.get('time', 'N/A'),
-            'name': appt_dict.get('name', 'N/A'),
-            'email': appt_dict.get('email', 'N/A'),
-            'appointment_reason': appt_dict.get('appointment_reason', 'N/A')
-        })
-    
-    appointments_text = "\n".join([
-    f"Appointment {i+1}:\n"
-    f"- Date: {appt['date']}\n"
-    f"- Time: {appt['time']}\n"
-    f"- Name: {appt['name']}\n"
-    f"- Email: {appt['email']}\n"
-    f"- Reason: {appt['appointment_reason']}"
-    for i, appt in enumerate(appointments_info)
-])
-
-    
-    appointments_prompt = f"""
-    The user has requested their appointment details.  
-
-    Below are the appointments retrieved from our system:  
-
-    {appointments_text}  
-
-    Please present this information in a clear, concise, and user-friendly format.
-"""
-
-    
-    formatted_appointments = get_llm_response(llm, appointments_prompt)
-    
-    if formatted_appointments:
-        return f"{clean_response}\n\n{formatted_appointments}"
-    return f"{clean_response}\n\nHere are your appointments:\n\n{appointments_text}"
-#Handles user input and manages the appointment booking process.
+# Handles user input and manages the appointment booking process.
 def process_chat_message(user_input, llm_chain, llm, session_data=None):
     try:
         current_name = None
@@ -304,33 +211,50 @@ def process_chat_message(user_input, llm_chain, llm, session_data=None):
     except Exception as e:
         return f"Error processing message: {str(e)}\n\nPlease try again or restart the application."
 
-def setup_database():
-    # Ensure data directory exists
-    os.makedirs('database', exist_ok=True)
-    conn = sqlite3.connect('database/booking.db')
-    c = conn.cursor()
+def display_formatted_appointments(appointments, clean_response, llm):
+    if not appointments:
+        return f"{clean_response}\n\nYou don't have any appointments scheduled."
     
-    c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='booking'")
-    table_exists = c.fetchone()
+    appointments_info = []
+    columns = fetch_table_columns()
     
-    if table_exists:
-        try:
-            c.execute("SELECT email FROM booking LIMIT 1")
-        except sqlite3.OperationalError:
-            print("Adding email column to existing database...")
-            c.execute("ALTER TABLE booking ADD COLUMN email TEXT DEFAULT 'no-email@example.com'")
-            conn.commit()
-    else:
-        c.execute('''
-        CREATE TABLE booking
-        (id INTEGER PRIMARY KEY AUTOINCREMENT,
-         name TEXT NOT NULL,
-         email TEXT NOT NULL,
-         date TEXT NOT NULL,
-         time TEXT NOT NULL,
-         appointment_reason TEXT,
-         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)
-        ''')
-        conn.commit()
+    for appt in appointments:
+        appt_dict = {columns[i]: appt[i] for i in range(len(appt)) if i < len(columns)}
+        appointments_info.append({
+            'date': appt_dict.get('date', 'N/A'),
+            'time': appt_dict.get('time', 'N/A'),
+            'name': appt_dict.get('name', 'N/A'),
+            'email': appt_dict.get('email', 'N/A'),
+            'appointment_reason': appt_dict.get('appointment_reason', 'N/A')
+        })
     
-    conn.close()
+    appointments_text = "\n".join([
+    f"Appointment {i+1}:\n"
+    f"- Date: {appt['date']}\n"
+    f"- Time: {appt['time']}\n"
+    f"- Name: {appt['name']}\n"
+    f"- Email: {appt['email']}\n"
+    f"- Reason: {appt['appointment_reason']}"
+    for i, appt in enumerate(appointments_info)
+])
+
+    
+    appointments_prompt = f"""
+    The user has requested their appointment details.  
+
+    Below are the appointments retrieved from our system:  
+
+    {appointments_text}  
+
+    Please present this information in a clear, concise, and user-friendly format.
+"""
+
+    
+    formatted_appointments = get_llm_response(llm, appointments_prompt)
+    
+    if formatted_appointments:
+        return f"{clean_response}\n\n{formatted_appointments}"
+    return f"{clean_response}\n\nHere are your appointments:\n\n{appointments_text}"
+
+# Call setup_database() at the start of your application to ensure the database is ready.
+setup_database()
