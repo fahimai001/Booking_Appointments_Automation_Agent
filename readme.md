@@ -1,1 +1,1 @@
-![Agent Preview](images/agent.png)
+![Agent Preview](agent.png)
