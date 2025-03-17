@@ -162,7 +162,7 @@ def fetch_appointments(name=None, email=None, date=None):
     appointments = c.fetchall()
     conn.close()
     return appointments
-
+#Checks if a specific appointment already exists.
 def appointment_exists(name, email, date, time):
     conn = sqlite3.connect('database/booking.db')
     c = conn.cursor()
@@ -200,31 +200,33 @@ def display_formatted_appointments(appointments, clean_response, llm):
         })
     
     appointments_text = "\n".join([
-        f"Appointment {i+1}:\n" +
-        f"- Date: {appt['date']}\n" +
-        f"- Time: {appt['time']}\n" +
-        f"- Name: {appt['name']}\n" +
-        f"- Email: {appt['email']}\n" +
-        f"- Appointment_reason: {appt['appointment_reason']}"
-        for i, appt in enumerate(appointments_info)
-    ])
+    f"Appointment {i+1}:\n"
+    f"- Date: {appt['date']}\n"
+    f"- Time: {appt['time']}\n"
+    f"- Name: {appt['name']}\n"
+    f"- Email: {appt['email']}\n"
+    f"- Reason: {appt['appointment_reason']}"
+    for i, appt in enumerate(appointments_info)
+])
+
     
     appointments_prompt = f"""
-    The user has asked to retrieve their appointment information.
-    
-    Here are the appointments found in our system:
-    
-    {appointments_text}
-    
-    Please format this information in a friendly, easy-to-read way to present back to the user.
-    """
+    The user has requested their appointment details.  
+
+    Below are the appointments retrieved from our system:  
+
+    {appointments_text}  
+
+    Please present this information in a clear, concise, and user-friendly format.
+"""
+
     
     formatted_appointments = get_llm_response(llm, appointments_prompt)
     
     if formatted_appointments:
         return f"{clean_response}\n\n{formatted_appointments}"
     return f"{clean_response}\n\nHere are your appointments:\n\n{appointments_text}"
-
+#Handles user input and manages the appointment booking process.
 def process_chat_message(user_input, llm_chain, llm, session_data=None):
     try:
         current_name = None
