@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Appointment Automation Agent</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .chat-input textarea {
+            width: 100%;
+            height: 60px;
+            resize: none;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Appointment Automation Agent</h1>
+        </header>
+        
+        <main>
+            <div class="chat-container">
+                <div class="chat-messages" id="chat-messages">
+                    {% for message in messages %}
+                        <div class="message {{ message.role }}">
+                            <div class="avatar">
+                                {% if message.role == 'assistant' %}
+                                    <i class="fas fa-robot"></i>
+                                {% else %}
+                                    <i class="fas fa-user"></i>
+                                {% endif %}
+                            </div>
+                            <div class="message-content">
+                                {{ message.content | replace('\n', '<br>') | safe }}
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+                
+                <div class="chat-input">
+                    <form id="message-form">
+                        <div class="input-container">
+                            <textarea id="user-input" name="user_input" placeholder="Type your message here..." autocomplete="off" required></textarea>
+                            <button type="submit" class="send-button">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </main>
+        
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.getElementById('message-form');
+            const userInput = document.getElementById('user-input');
+            const chatMessages = document.getElementById('chat-messages');
+            
+            // Scroll to bottom of chat initially
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const message = userInput.value.trim();
+                
+                if (!message) return;
+                
+                // Add user message to chat
+                appendMessage('user', message);
+                
+                // Clear input
+                userInput.value = '';
+                
+                // Show loading indicator
+                const loadingEl = document.createElement('div');
+                loadingEl.className = 'message assistant loading';
+                loadingEl.innerHTML = `
+                    <div class="avatar">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <div class="message-content">
+                        <div class="typing-indicator">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
+                    </div>
+                `;
+                chatMessages.appendChild(loadingEl);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+                
+                // Send message to server
+                fetch('/send_message', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams({
+                        'user_input': message
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    // Remove loading indicator
+                    chatMessages.removeChild(loadingEl);
+                    
+                    // Add assistant response
+                    appendMessage('assistant', data.assistant_message);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    chatMessages.removeChild(loadingEl);
+                    appendMessage('assistant', 'Sorry, there was an error processing your request. Please try again.');
+                });
+            });
+            
+            function appendMessage(role, content) {
+                const messageEl = document.createElement('div');
+                messageEl.className = `message ${role}`;
+                
+                messageEl.innerHTML = `
+                    <div class="avatar">
+                        <i class="fas fa-${role === 'assistant' ? 'robot' : 'user'}"></i>
+                    </div>
+                    <div class="message-content">
+                        ${content.replace(/\n/g, '<br>')}
+                    </div>
+                `;
+                
+                chatMessages.appendChild(messageEl);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+        });
+    </script>
+</body>
+</html>

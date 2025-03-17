@@ -1,372 +1,330 @@
-import os
+import sqlite3
 import re
+import os
+import datetime
 from datetime import datetime, timedelta
-from dotenv import load_dotenv
-from langchain_core.messages import HumanMessage, AIMessage
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables.history import RunnableWithMessageHistory
-from langchain_core.runnables import RunnablePassthrough
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_community.chat_message_histories import ChatMessageHistory
 import dateparser
-from src.db_manager import DatabaseManager
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain.memory import ConversationBufferMemory
+from langchain.schema import HumanMessage, AIMessage
+from langchain.chains import LLMChain
 
-db = DatabaseManager()
-
-def load_api_key():
-    load_dotenv()
-    api_key = os.getenv("GEMINI_API_KEY")
+def initialize_llm_chain():
+    api_key = os.environ.get('GEMINI_API_KEY', '')
+    
     if not api_key:
-        raise ValueError("GEMINI_API_KEY environment variable not found. Please set it in your .env file.")
-    return api_key
-
-def get_llm(api_key):
-    return ChatGoogleGenerativeAI(
-        google_api_key=api_key,
-        model="gemini-2.0-flash",
-        convert_system_message_to_human=True
+        raise ValueError("Google API key not found. Please set it in your environment variables.")
+    
+    llm = ChatGoogleGenerativeAI(
+        api_key=api_key,
+        model="gemini-2.0-flash"
     )
+    
+    prompt = ChatPromptTemplate.from_messages([
+       ("system", """
+        You are an appointment booking assistant. Your task is to:
+        1. Help users book appointments by collecting information step-by-step.
+        2. Begin by greeting the user and asking for their name.
+        3. Once the name is provided, ask for their email address (this is required).
+        4. After obtaining the email, ask for the appointment date.
+        5. Then, ask for the appointment time.
+        6. Finally, ask for the appointment_reason.
+        7. Additionally, assist users in retrieving their appointment information if needed.
+        8. Respond in a friendly and helpful way.
 
-def get_appointment_patterns():
-    return {
-        "user_name": r"(?:name[:\s]+)([A-Za-z\s]+)|(?:my name is\s+)([A-Za-z\s]+)|(?:i am\s+)([A-Za-z\s]+)|(?:This is\s+)([A-Za-z\s]+)",
-        "date": r"(?:date[:\s]+)([A-Za-z0-9\s,]+)|(?:on\s+)([A-Za-z0-9\s,]+)|(?:for\s+)([A-Za-z0-9\s,]+\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b[A-Za-z0-9\s,]+)",
-        "time": r"(?:time[:\s]+)([0-9:]+\s*(?:AM|PM|am|pm)?)|(?:at\s+)([0-9:]+\s*(?:AM|PM|am|pm)?)",
-        "email": r"(?:email[:\s]+)([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)|([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)",
-        "appointment_type": r"(?:appointment_type[:\s]+)(Data Science|AI\/ML|Application Development|Database Development)|(?:for\s+)(Data Science|AI\/ML|Application Development|Database Development)|(?:regarding\s+)(Data Science|AI\/ML|Application Development|Database Development)"
-    }
+        Important: Ensure you always ask for an email address if it's not provided, as it is required for all appointments.
 
-def get_system_prompt():
-    return """
-You are an expert and helpful appointment booking assistant. Your responsibility is to Book Appointment with "Sabir".
+        - Only use information explicitly provided by the user. Do not add or assume any details that have not been given.
+        - If any required information (such as name, email, date, time, or appointment_reason) is missing or ambiguous, clearly state which details are needed and ask clarifying questions.
+        - Verify the validity of provided details before generating appointment records.
+        - When retrieving appointment information, only reference data that has been confirmed by the user.
+        - Refrain from generating extraneous or fictional details.
 
-Extract relevant details from the user's prompt. You should collect information sequentially if not provided all at once:
-1. user_name - Ask for their name if not provided
-2. date - Ask for their preferred date if not provided
-3. time - Ask for their preferred time if not provided
-4. email - Ask for their email address if not provided
-5. appointment_type - Ask them to choose from: Data Science, AI/ML, Application Development, Database Development
-
-Once all details are collected, confirm the appointment details with the user and respond with a nice confirmation message.
-
-If a user asks about their appointment, provide details from the database in a friendly manner.
-
-Remember to only book appointments with Sabir who specializes in Data Science, AI/ML, Application Development, and Database Development.
-
-Be conversational and friendly. If the user asks questions about Sabir's expertise, offer brief information about the services.
-"""
-
-def create_prompt_template():
-    return ChatPromptTemplate.from_messages([
-        ("system", get_system_prompt()),
+        When you identify appointment details, format your response with JSON-like tags:
+         
+        <APPOINTMENT_DETAILS>
+        name: [extracted name]
+        email: [extracted email]
+        date: [extracted date in DD-MM-YYYY format]
+        time: [extracted time in HH:MM format]
+        appointment_reason: [extracted appointment_reason]
+        action: [book/retrieve]
+        </APPOINTMENT_DETAILS>
+        
+        If any required information is missing, clearly state which details are needed and do not use the JSON-like format."""),
         MessagesPlaceholder(variable_name="history"),
-        ("human", "{input}"),
+        ("human", "{input}")
     ])
+    
+    memory = ConversationBufferMemory(return_messages=True, input_key="input", memory_key="history")
+    
+    chain = LLMChain(
+        llm=llm,
+        prompt=prompt,
+        memory=memory
+    )
+    
+    return chain, llm
 
-def extract_appointment_details(user_input):
-    appointment_details = {}
-    appointment_pattern = get_appointment_patterns()
-    
-    for field, pattern in appointment_pattern.items():
-        match = re.search(pattern, user_input, re.IGNORECASE)
-        if match:
-            caught_group = next((g for g in match.groups() if g is not None), None)
-            if caught_group:
-                appointment_details[field] = caught_group.strip()
-    
-    if "date" not in appointment_details:
-        try:
-            parsed_date = dateparser.parse(user_input, settings={'PREFER_DATES_FROM': 'future'})
-            if parsed_date:
-                appointment_details["date"] = parsed_date.strftime("%Y-%m-%d")
-        except Exception as e:
-            print(f"Date parsing error: {e}")
-    
-    return appointment_details
-
-def extract_date_reference(user_input):
-    today = datetime.now()
-    
-    if "today" in user_input.lower():
-        return today.strftime("%Y-%m-%d")
-    elif "tomorrow" in user_input.lower():
-        return (today + timedelta(days=1)).strftime("%Y-%m-%d")
-    elif "next week" in user_input.lower():
-        return (today + timedelta(days=7)).strftime("%Y-%m-%d")
-    elif "day after tomorrow" in user_input.lower():
-        return (today + timedelta(days=2)).strftime("%Y-%m-%d")
-    
+def get_llm_response(llm, prompt_text):
     try:
-        parsed_date = dateparser.parse(user_input, settings={'PREFER_DATES_FROM': 'future'})
+        return llm.invoke(prompt_text).content
+    except Exception as e:
+        print(f"Failed to generate message with LLM: {str(e)}")
+        return None
+
+def parse_appointment_details(response_text):
+    details_pattern = r'<APPOINTMENT_DETAILS>(.*?)</APPOINTMENT_DETAILS>'
+    match = re.search(details_pattern, response_text, re.DOTALL)
+    
+    if not match:
+        return None, response_text.strip()
+    
+    details_text = match.group(1).strip()
+    details = {}
+    
+    name_extraction = re.search(r'name:\s*(.*)', details_text)
+    email_extraction = re.search(r'email:\s*(.*)', details_text)
+    date_extraction = re.search(r'date:\s*(.*)', details_text)
+    time_extraction = re.search(r'time:\s*(.*)', details_text)
+    reason_extraction = re.search(r'appointment_reason:\s*(.*)', details_text)
+    action_extraction = re.search(r'action:\s*(.*)', details_text)
+    
+    if name_extraction:
+        details['name'] = name_extraction.group(1).strip()
+    if email_extraction:
+        details['email'] = email_extraction.group(1).strip()
+    if date_extraction:
+        date_str = date_extraction.group(1).strip()
+        parsed_date = dateparser.parse(date_str)
         if parsed_date:
-            return parsed_date.strftime("%Y-%m-%d")
-    except Exception as e:
-        print(f"Date reference extraction error: {e}")
-    
-    return None
-
-def format_time(time_str):
-    try:
-        time_str = time_str.strip().lower()
-        
-        formats = [
-            "%I:%M %p",
-            "%I:%M%p",
-            "%H:%M",
-            "%I %p"
-        ]
-        
-        for fmt in formats:
+            details['date'] = parsed_date.strftime('%Y-%m-%d')
+        else:
+            details['date'] = date_str
+    if time_extraction:
+        time_str = time_extraction.group(1).strip()
+        if ':' not in time_str:
             try:
-                time_obj = datetime.strptime(time_str, fmt)
-                return time_obj.strftime("%H:%M")
+                hour = int(time_str)
+                time_str = f"{hour:02d}:00"
             except ValueError:
-                continue
-        
-        if ":" not in time_str:
-            match = re.match(r"(\d+)\s*(am|pm)", time_str)
-            if match:
-                hour, meridiem = match.groups()
-                hour = int(hour)
-                if meridiem == "pm" and hour < 12:
-                    hour += 12
-                elif meridiem == "am" and hour == 12:
-                    hour = 0
-                return f"{hour:02d}:00"
-        
-        parsed_time = dateparser.parse(time_str)
-        if parsed_time:
-            return parsed_time.strftime("%H:%M")
-            
-        return time_str
-    except Exception as e:
-        print(f"Error formatting time: {e}")
-        return time_str
+                pass
+        details['time'] = time_str
+    if reason_extraction:
+        details['appointment_reason'] = reason_extraction.group(1).strip()
+    if action_extraction:
+        details['action'] = action_extraction.group(1).strip()
 
-def save_appointment(details, message_history):
-    if not details:
-        return None, "No appointment details found to save."
     
-    print(f"Saving appointment with details: {details}")
+    clean_response = re.sub(details_pattern, '', response_text, flags=re.DOTALL).strip()
     
-    required_fields = ["user_name", "date", "time", "email", "appointment_type"]
-    missing = [f for f in required_fields if f not in details]
-    if missing:
-        return None, f"Missing required fields: {', '.join(missing)}"
-    
-    if 'time' in details:
-        try:
-            details['time'] = format_time(details['time'])
-        except Exception as e:
-            print(f"Error formatting time: {e}")
-    
-    if 'date' in details:
-        try:
-            if not re.match(r'\d{4}-\d{2}-\d{2}', details['date']):
-                parsed_date = dateparser.parse(details['date'], settings={'PREFER_DATES_FROM': 'future'})
-                if parsed_date:
-                    details['date'] = parsed_date.strftime("%Y-%m-%d")
-        except Exception as e:
-            print(f"Error formatting date: {e}")
-    
-    try:
-        if db.conn is None or db.cursor is None:
-            db.connect()
-            
-        success, message = db.save_appointment(details)
-        
-        if success:
-            appointment_str = "APPOINTMENT_DETAILS: " + ", ".join([f"{k}: {v}" for k, v in details.items()])
-            message_history.add_user_message("Save my appointment")
-            message_history.add_ai_message(appointment_str)
-            saved_appts = db.get_appointments(email=details['email'])
-            print(f"After save: Found {len(saved_appts)} appointments for {details['email']}")
-            return details, message
-        else:
-            print(f"Database error: {message}")
-            return None, message
-    except Exception as e:
-        error_msg = f"Exception during appointment save: {str(e)}"
-        print(error_msg)
-        return None, error_msg
+    return details, clean_response
 
-def has_all_required_details(details):
-    required_fields = ["user_name", "date", "time", "email", "appointment_type"]
-    return all(field in details for field in required_fields)
+def validate_email_format(email):
+    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return bool(re.match(email_pattern, email))
 
-def retrieve_appointments(message_history, query=None):
-    def extract_email_from_text(text):
-        if not text:
-            return None
-        email_pattern = r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+"
-        match = re.search(email_pattern, text)
-        if match:
-            return match.group(0)
-        return None
+def insert_appointment(name, email, date, time, appointment_reason):
+    conn = sqlite3.connect('booking.db')
+    c = conn.cursor()
+    c.execute("INSERT INTO booking (name, email, date, time, appointment_reason) VALUES (?, ?, ?, ?, ?)",
+              (name, email, date, time, appointment_reason))
+    conn.commit()
+    conn.close()
+
+def fetch_appointments(name=None, email=None, date=None):
+    conn = sqlite3.connect('booking.db')
+    c = conn.cursor()
     
-    email = extract_email_from_text(query) if query else None
-    date_ref = extract_date_reference(query) if query else None
+    query = "SELECT * FROM booking"
+    params = []
     
-    is_next_appointment_query = query and any(word in query.lower() for word in ["next", "upcoming"])
+    conditions = []
+    if name:
+        conditions.append("name = ?")
+        params.append(name)
+    if email:
+        conditions.append("email = ?")
+        params.append(email)
+    if date:
+        conditions.append("date = ?")
+        params.append(date)
     
-    if is_next_appointment_query:
-        next_appointment = db.get_next_appointment(email)
-        if next_appointment:
-            return f"""Your next appointment is:
-- Name: {next_appointment['user_name']}
-- Date: {next_appointment['date']}
-- Time: {next_appointment['time']}
-- Type: {next_appointment['appointment_type']}"""
-        else:
-            return "You don't have any upcoming appointments."
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
     
-    elif date_ref:
-        appointments = db.get_appointments(email=email, date=date_ref)
-        if appointments:
-            result = f"Here are your appointments for {date_ref}:\n"
-            for i, appointment in enumerate(appointments, 1):
-                result += f"""
-{i}. Appointment with Sabir:
-   - Name: {appointment['user_name']}
-   - Time: {appointment['time']}
-   - Type: {appointment['appointment_type']}"""
-            return result
-        else:
-            return f"You don't have any appointments scheduled for {date_ref}."
+    query += " ORDER BY date, time"
     
-    else:
-        appointments = db.get_appointments(email=email)
-        if appointments:
-            result = "Here are all your appointments:\n"
-            for i, appointment in enumerate(appointments, 1):
-                result += f"""
-{i}. Appointment on {appointment['date']} at {appointment['time']}:
-   - Name: {appointment['user_name']}
-   - Type: {appointment['appointment_type']}"""
-            return result
-        else:
-            friendly_message = "I couldn't find any appointments for you. Would you like to schedule one now?"
-            return friendly_message
+    c.execute(query, params)
+    appointments = c.fetchall()
+    conn.close()
+    return appointments
+
+def appointment_exists(name, email, date, time):
+    conn = sqlite3.connect('booking.db')
+    c = conn.cursor()
     
-    appointments = []
-    messages = message_history.messages
+    c.execute("SELECT * FROM booking WHERE name = ? AND email = ? AND date = ? AND time = ?", 
+              (name, email, date, time))
+    result = c.fetchone()
     
-    for message in messages:
-        if hasattr(message, 'content') and "APPOINTMENT_DETAILS:" in message.content:
-            appointment_info = message.content.split("APPOINTMENT_DETAILS:")[1].strip()
-            appointments.append(appointment_info)
-    
+    conn.close()
+    return result is not None
+
+def fetch_table_columns():
+    conn = sqlite3.connect('booking.db')
+    c = conn.cursor()
+    c.execute("PRAGMA table_info(booking)")
+    columns = c.fetchall()
+    conn.close()
+    return [col[1] for col in columns]
+
+def display_formatted_appointments(appointments, clean_response, llm):
     if not appointments:
-        return "No appointments found."
+        return f"{clean_response}\n\nYou don't have any appointments scheduled."
     
-    return "Here are your appointments from history:\n" + "\n".join(appointments)
+    appointments_info = []
+    columns = fetch_table_columns()
+    
+    for appt in appointments:
+        appt_dict = {columns[i]: appt[i] for i in range(len(appt)) if i < len(columns)}
+        appointments_info.append({
+            'date': appt_dict.get('date', 'N/A'),
+            'time': appt_dict.get('time', 'N/A'),
+            'name': appt_dict.get('name', 'N/A'),
+            'email': appt_dict.get('email', 'N/A'),
+            'appointment_reason': appt_dict.get('appointment_reason', 'N/A')
+        })
+    
+    appointments_text = "\n".join([
+        f"Appointment {i+1}:\n" +
+        f"- Date: {appt['date']}\n" +
+        f"- Time: {appt['time']}\n" +
+        f"- Name: {appt['name']}\n" +
+        f"- Email: {appt['email']}\n" +
+        f"- Appointment_reason: {appt['appointment_reason']}"
+        for i, appt in enumerate(appointments_info)
+    ])
+    
+    appointments_prompt = f"""
+    The user has asked to retrieve their appointment information.
+    
+    Here are the appointments found in our system:
+    
+    {appointments_text}
+    
+    Please format this information in a friendly, easy-to-read way to present back to the user.
+    """
+    
+    formatted_appointments = get_llm_response(llm, appointments_prompt)
+    
+    if formatted_appointments:
+        return f"{clean_response}\n\n{formatted_appointments}"
+    return f"{clean_response}\n\nHere are your appointments:\n\n{appointments_text}"
 
-def is_booking_request(user_input):
-    booking_keywords = ["book", "schedule", "make", "set", "create", "arrange", "appointment", "new appointment"]
-    return any(keyword in user_input.lower() for keyword in booking_keywords)
-
-def is_retrieval_request(user_input):
-    retrieval_keywords = ["show", "get", "find", "view", "check", "see", "tell", "when is", "do i have", "my appointment"]
-    appointment_keywords = ["appointment", "schedule", "booking"]
-    
-    has_retrieval = any(keyword in user_input.lower() for keyword in retrieval_keywords)
-    has_appointment = any(keyword in user_input.lower() for keyword in appointment_keywords)
-    
-    return has_retrieval and has_appointment or "next appointment" in user_input.lower()
-
-def get_next_question(details):
-    if "user_name" not in details:
-        return "Could you please tell me your name?"
-    elif "date" not in details:
-        return "On what date would you like to schedule your appointment with Sabir?"
-    elif "time" not in details:
-        return "What time would work best for you? Sabir is available from 9 AM to 5 PM."
-    elif "email" not in details:
-        return "Please provide your email address for the appointment confirmation."
-    elif "appointment_type" not in details:
-        return "What type of service are you interested in? Sabir specializes in: Data Science, AI/ML, Application Development, or Database Development."
-    else:
-        return None
-
-def process_user_input(user_input, message_history, current_details, collecting_info, llm):
-    new_details = extract_appointment_details(user_input)
-    
-    current_details.update(new_details)
-    
-    print(f"Current appointment details: {current_details}")
-    
-    if is_booking_request(user_input) or collecting_info:
-        collecting_info = True
+def process_chat_message(user_input, llm_chain, llm, session_data=None):
+    try:
+        current_name = None
+        current_email = None
         
-        if has_all_required_details(current_details):
-            print("All required details collected, saving appointment...")
+        if session_data:
+            current_name = session_data.get('current_name')
+            current_email = session_data.get('current_email')
+        
+        llm_response = llm_chain.invoke({"input": user_input})
+        response_text = llm_response["text"]
+        
+        details, clean_response = parse_appointment_details(response_text)
+        
+        if not details:
+            return clean_response
+        
+        if details.get('action') == 'book':
+            if not details.get('name'):
+                details['name'] = current_name or ''
+            if not details.get('email'):
+                details['email'] = current_email or ''
             
-            if 'date' in current_details and not re.match(r'\d{4}-\d{2}-\d{2}', current_details['date']):
-                try:
-                    parsed_date = dateparser.parse(current_details['date'], settings={'PREFER_DATES_FROM': 'future'})
-                    if parsed_date:
-                        current_details['date'] = parsed_date.strftime("%Y-%m-%d")
-                        print(f"Formatted date: {current_details['date']}")
-                except Exception as e:
-                    print(f"Error formatting date: {e}")
-            
-            if 'time' in current_details:
-                try:
-                    current_details['time'] = format_time(current_details['time'])
-                    print(f"Formatted time: {current_details['time']}")
-                except Exception as e:
-                    print(f"Error formatting time: {e}")
-            
-            saved_details, message = save_appointment(current_details, message_history)
-            
-            if saved_details:
-                confirmation = f"""
-Great! I've booked your appointment with Sabir.
-
-Appointment Details:
-- Name: {current_details['user_name']}
-- Date: {current_details['date']}
-- Time: {current_details['time']}
-- Email: {current_details['email']}
-- Service: {current_details['appointment_type']}
-
-Thank you for scheduling with us. You will receive a confirmation email shortly.
-Is there anything else I can help you with?
-"""
-                message_history.add_user_message(user_input)
-                message_history.add_ai_message(confirmation)
+            missing = []
+            if not details.get('name'):
+                missing.append("name")
+            if not details.get('email'):
+                missing.append("email")
+            elif not validate_email_format(details.get('email')):
+                return f"{clean_response}\n\nThe email address provided doesn't seem to be valid. Please provide a valid email address."
+            if not details.get('date'):
+                missing.append("date")
+            if not details.get('time'):
+                missing.append("time")
                 
-                return confirmation, {}, False
-            else:
-                error_msg = f"I'm sorry, there was an issue saving your appointment: {message}. Please try again."
-                message_history.add_user_message(user_input)
-                message_history.add_ai_message(error_msg)
-                return error_msg, current_details, False
-        else:
-            next_question = get_next_question(current_details)
-            message_history.add_user_message(user_input)
-            message_history.add_ai_message(next_question)
-            return next_question, current_details, True
+            if missing:
+                return f"{clean_response}\n\nI still need your {', '.join(missing)} to book the appointment."
+            
+            if appointment_exists(details['name'], details['email'], details['date'], details['time']):
+                return f"You already have an appointment on {details['date']} at {details['time']}. Would you like to book a different time?"
+            
+            appointment_reason = details.get('appointment_reason', 'General appointment')
+            insert_appointment(details['name'], details['email'], details['date'], details['time'], appointment_reason)
+            
+            prompt = f"""
+            Based on our conversation, I've booked an appointment with the following details:
+            - Name: {details['name']}
+            - Email: {details['email']}
+            - Date: {details['date']}
+            - Time: {details['time']}
+            - Appointment_reason: {details.get('appointment_reason', 'General appointment')}
+            
+            Please format this information in a friendly, easy-to-read way to present back to the user.
+            """
+            
+            confirmation = get_llm_response(llm, prompt)
+            if confirmation:
+                return f"{clean_response}\n\n{confirmation}"
+            return f"{clean_response}\n\nGreat! I've booked your appointment for {details['date']} at {details['time']}."
+        
+        elif details.get('action') == 'retrieve':
+            name = details.get('name') or current_name or ''
+            email = details.get('email') or current_email or ''
+            date = details.get('date')
+            
+            if not name and not email:
+                return f"{clean_response}\n\nPlease provide your name or email so I can check your appointments."
+            
+            appointments = fetch_appointments(name, email, date)
+            
+            return display_formatted_appointments(appointments, clean_response, llm)
+            
+        return clean_response
     
-    elif is_retrieval_request(user_input):
-        response = retrieve_appointments(message_history, user_input)
-        message_history.add_user_message(user_input)
-        message_history.add_ai_message(response)
-        return response, current_details, collecting_info
+    except Exception as e:
+        return f"Error processing message: {str(e)}\n\nPlease try again or restart the application."
+
+def setup_database():
+    conn = sqlite3.connect('booking.db')
+    c = conn.cursor()
     
+    c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='booking'")
+    table_exists = c.fetchone()
+    
+    if table_exists:
+        try:
+            c.execute("SELECT email FROM booking LIMIT 1")
+        except sqlite3.OperationalError:
+            print("Adding email column to existing database...")
+            c.execute("ALTER TABLE booking ADD COLUMN email TEXT DEFAULT 'no-email@example.com'")
+            conn.commit()
     else:
-        chain = create_prompt_template() | llm | StrOutputParser()
-        chain_with_history = RunnableWithMessageHistory(
-            chain,
-            lambda session_id: message_history,
-            input_messages_key="input",
-            history_messages_key="history",
-        )
-        
-        response = chain_with_history.invoke(
-            {"input": user_input},
-            config={"configurable": {"session_id": "streamlit_session"}}
-        )
-        
-        return response, current_details, collecting_info
+        c.execute('''
+        CREATE TABLE booking
+        (id INTEGER PRIMARY KEY AUTOINCREMENT,
+         name TEXT NOT NULL,
+         email TEXT NOT NULL,
+         date TEXT NOT NULL,
+         time TEXT NOT NULL,
+         appointment_reason TEXT,
+         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)
+        ''')
+        conn.commit()
+    
+    conn.close()
