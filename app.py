@@ -6,7 +6,6 @@ from src.helper_func import setup_database, initialize_llm_chain, process_chat_m
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-# Global variables for the language model chain and instance.
 llm_chain = None
 llm = None
 
@@ -20,7 +19,7 @@ def initialize_services():
         llm_chain, llm = initialize_llm_chain()
     except Exception as err:
         app.logger.error("Error initializing LLM: %s", err)
-        raise err  # Halt the app if LLM initialization fails.
+        raise err 
 
     try:
         setup_database()
@@ -55,12 +54,10 @@ def send_message():
     if not user_input:
         return jsonify({'error': 'No input provided'}), 400
     
-    # Append the user's message to the session history.
     session_messages = session.get('messages', [])
     session_messages.append({"role": "user", "content": user_input})
     session['messages'] = session_messages
 
-    # Process the input and generate a response.
     response = process_chat_message(
         user_input,
         llm_chain,
