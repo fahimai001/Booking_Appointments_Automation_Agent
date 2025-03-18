@@ -22,3 +22,14 @@ A conversational web application designed to assist users with booking and retri
 │   └── db.py                   # Manages SQLite database operations (insertion, retrieval, and schema setup).
 └── templates/
     └── index.html              # HTML template for the web interface.
+
+# Installation
+
+1. Prerequisites:
+    * Python 3.7 or higher.
+    * A valid Google API key for Gemini (set as the environment variable GEMINI_API_KEY).
+
+2. Clone the Repository:
+
+git clone https://github.com/fahimai001/Booking_Appointments_Automation_Agent.git
+cd Booking_Appointments_Automation_Agent
