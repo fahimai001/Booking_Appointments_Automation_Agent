@@ -33,3 +33,27 @@ A conversational web application designed to assist users with booking and retri
 
 git clone https://github.com/fahimai001/Booking_Appointments_Automation_Agent.git
 cd Booking_Appointments_Automation_Agent
+
+# Create a Virtual Environment (Optional but Recommended):
+python -m venv venv
+source venv/bin/activate   # On Windows: venv\Scripts\activate
+
+4. Install Required Packages: Ensure you have the necessary dependencies installed. You can install the required libraries using pip. Create a requirements.txt file with the following (adjust versions as needed):
+
+Flask
+langchain
+langchain_google_genai
+dateparser
+
+Then run:
+pip install -r requirements.txt
+
+# Database Initialization:
+
+The application automatically creates a database directory and initializes the SQLite database (booking.db) on startup. If the database schema requires updating, the system will alter the table as needed.
+
+# Running the Application
+Start the Flask application by executing:
+
+python app.py
+
