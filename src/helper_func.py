@@ -24,7 +24,6 @@ def setup_llm_chain():
     if not api_key:
         raise ValueError("Google API key not found. Please set GEMINI_API_KEY in your environment.")
     
-    # Initialize the LLM instance.
     llm = ChatGoogleGenerativeAI(api_key=api_key, model="gemini-2.0-flash")
     
     system_instructions = """
