@@ -133,7 +133,6 @@ def handle_chat_message(user_input: str, llm_chain, llm, session_context: dict =
         return cleaned_response
     
     if details.get("action") == "book":
-        # Ensure name and email are set, possibly from session context.
         details.setdefault("name", current_name)
         details.setdefault("email", current_email)
         
