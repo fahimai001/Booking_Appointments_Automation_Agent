@@ -58,7 +58,7 @@ def send_message():
         user_input,
         llm_chain,
         llm,
-        session_context={  # Updated parameter name to match the function definition
+        session_context={ 
             'current_name': session.get('current_name'),
             'current_email': session.get('current_email')
         }
