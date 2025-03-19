@@ -54,7 +54,6 @@ def send_message():
     session_messages.append({"role": "user", "content": user_input})
     session['messages'] = session_messages
 
-    # Change from process_chat_message to handle_chat_message
     response = handle_chat_message(
         user_input,
         llm_chain,
