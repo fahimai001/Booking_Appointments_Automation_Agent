@@ -169,7 +169,6 @@ def handle_chat_message(user_input: str, llm_chain, llm, session_context: dict =
         return f"{cleaned_response}\n\nYour appointment is confirmed for {details['date']} at {details['time']}."
     
     elif details.get("action") == "retrieve":
-        # Use either the provided or the session data.
         name = details.get("name") or current_name
         email = details.get("email") or current_email
         date_filter = details.get("date")
