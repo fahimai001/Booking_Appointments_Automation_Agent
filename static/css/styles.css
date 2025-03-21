@@ -178,7 +178,6 @@ main {
     animation-delay: 0.4s;
 }
 
-/* Footer */
 footer {
     text-align: center;
     padding: 20px 0;
@@ -186,7 +185,6 @@ footer {
     font-size: 0.9rem;
 }
 
-/* Animations */
 @keyframes fadeIn {
     from {
         opacity: 0;
