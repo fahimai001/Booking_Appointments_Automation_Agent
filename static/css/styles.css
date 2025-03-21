@@ -62,7 +62,6 @@ main {
     min-height: 500px;
 }
 
-/* Chat messages area */
 .chat-messages {
     flex: 1;
     padding: 20px;
