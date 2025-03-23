@@ -76,7 +76,6 @@
                 
                 userInput.value = '';
                 
-                // Show loading indicator
                 const loadingEl = document.createElement('div');
                 loadingEl.className = 'message assistant loading';
                 loadingEl.innerHTML = `
@@ -94,7 +93,6 @@
                 chatMessages.appendChild(loadingEl);
                 chatMessages.scrollTop = chatMessages.scrollHeight;
                 
-                // Send message to server
                 fetch('/send_message', {
                     method: 'POST',
                     headers: {
