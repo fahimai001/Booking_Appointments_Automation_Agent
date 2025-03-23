@@ -104,10 +104,8 @@
                 })
                 .then(response => response.json())
                 .then(data => {
-                    // Remove loading indicator
                     chatMessages.removeChild(loadingEl);
                     
-                    // Add assistant response
                     appendMessage('assistant', data.assistant_message);
                 })
                 .catch(error => {
