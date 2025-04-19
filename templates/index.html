@@ -3,135 +3,261 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Appointment Automation Agent</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <title>Appointment Booking Assistant</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        .chat-input textarea {
-            width: 100%;
-            height: 60px;
-            resize: none;
+        body {
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .chat-container {
+            max-width: 700px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        
+        .chat-header {
+            background-color: #007bff;
+            color: white;
+            padding: 15px;
+            text-align: center;
+        }
+        
+        .chat-messages {
+            height: 400px;
+            overflow-y: auto;
+            padding: 15px;
+        }
+        
+        .message {
+            margin-bottom: 15px;
             padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
+            border-radius: 5px;
+            max-width: 80%;
+        }
+        
+        .user-message {
+            background-color: #007bff;
+            color: white;
+            margin-left: auto;
+        }
+        
+        .bot-message {
+            background-color: #e9ecef;
+            color: #212529;
+        }
+        
+        .chat-input {
+            display: flex;
+            padding: 15px;
+            border-top: 1px solid #dee2e6;
+        }
+        
+        .chat-input input {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 5px 0 0 5px;
+        }
+        
+        .chat-input button {
+            padding: 10px 15px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 0 5px 5px 0;
+            cursor: pointer;
+        }
+        
+        .appointments-table {
+            width: 100%;
+            margin-top: 15px;
+            border-collapse: collapse;
+        }
+        
+        .appointments-table th, .appointments-table td {
+            border: 1px solid #dee2e6;
+            padding: 8px;
+            text-align: left;
+        }
+        
+        .appointments-table th {
+            background-color: #f8f9fa;
+        }
+        
+        pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <header>
-            <h1>Appointment Automation Agent</h1>
-        </header>
-        
-        <main>
-            <div class="chat-container">
-                <div class="chat-messages" id="chat-messages">
-                    {% for message in messages %}
-                        <div class="message {{ message.role }}">
-                            <div class="avatar">
-                                {% if message.role == 'assistant' %}
-                                    <i class="fas fa-robot"></i>
-                                {% else %}
-                                    <i class="fas fa-user"></i>
-                                {% endif %}
-                            </div>
-                            <div class="message-content">
-                                {{ message.content | replace('\n', '<br>') | safe }}
-                            </div>
-                        </div>
-                    {% endfor %}
-                </div>
-                
-                <div class="chat-input">
-                    <form id="message-form">
-                        <div class="input-container">
-                            <textarea id="user-input" name="user_input" placeholder="Type your message here..." autocomplete="off" required></textarea>
-                            <button type="submit" class="send-button">
-                                <i class="fas fa-paper-plane"></i>
-                            </button>
-                        </div>
-                    </form>
-                </div>
+        <div class="chat-container">
+            <div class="chat-header">
+                <h2>Appointment Booking Assistant</h2>
             </div>
-        </main>
-        
+            <div class="chat-messages" id="chat-messages">
+                <!-- Messages will be added here dynamically -->
+            </div>
+            <div class="chat-input">
+                <input type="text" id="user-input" placeholder="Type your message...">
+                <button id="send-button">Send</button>
+            </div>
+        </div>
     </div>
 
     <script>
+        let currentState = 'choosing';
+        let bookingInfo = {};
+        
+        // Initialize chat
         document.addEventListener('DOMContentLoaded', function() {
-            const form = document.getElementById('message-form');
-            const userInput = document.getElementById('user-input');
-            const chatMessages = document.getElementById('chat-messages');
+            resetChat();
             
-            chatMessages.scrollTop = chatMessages.scrollHeight;
+            // Send message when button is clicked
+            document.getElementById('send-button').addEventListener('click', sendMessage);
             
-            form.addEventListener('submit', function(e) {
-                e.preventDefault();
-                
-                const message = userInput.value.trim();
-                
-                if (!message) return;
-                
-                appendMessage('user', message);
-                
-                userInput.value = '';
-                
-                const loadingEl = document.createElement('div');
-                loadingEl.className = 'message assistant loading';
-                loadingEl.innerHTML = `
-                    <div class="avatar">
-                        <i class="fas fa-robot"></i>
-                    </div>
-                    <div class="message-content">
-                        <div class="typing-indicator">
-                            <span></span>
-                            <span></span>
-                            <span></span>
-                        </div>
-                    </div>
-                `;
-                chatMessages.appendChild(loadingEl);
-                chatMessages.scrollTop = chatMessages.scrollHeight;
-                
-                fetch('/send_message', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                    },
-                    body: new URLSearchParams({
-                        'user_input': message
-                    })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    chatMessages.removeChild(loadingEl);
-                    
-                    appendMessage('assistant', data.assistant_message);
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    chatMessages.removeChild(loadingEl);
-                    appendMessage('assistant', 'Sorry, there was an error processing your request. Please try again.');
-                });
+            // Send message when Enter is pressed
+            document.getElementById('user-input').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    sendMessage();
+                }
             });
-            
-            function appendMessage(role, content) {
-                const messageEl = document.createElement('div');
-                messageEl.className = `message ${role}`;
-                
-                messageEl.innerHTML = `
-                    <div class="avatar">
-                        <i class="fas fa-${role === 'assistant' ? 'robot' : 'user'}"></i>
-                    </div>
-                    <div class="message-content">
-                        ${content.replace(/\n/g, '<br>')}
-                    </div>
-                `;
-                
-                chatMessages.appendChild(messageEl);
-                chatMessages.scrollTop = chatMessages.scrollHeight;
-            }
         });
+        
+        // Send user message to backend
+        function sendMessage() {
+            const userInput = document.getElementById('user-input').value.trim();
+            if (!userInput) return;
+            
+            // Add user message to chat
+            addMessage(userInput, 'user');
+            
+            // Clear input field
+            document.getElementById('user-input').value = '';
+            
+            // Send request to backend
+            fetch('/api/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    message: userInput,
+                    state: currentState,
+                    booking_info: bookingInfo
+                }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Update state and booking info
+                currentState = data.state;
+                bookingInfo = data.booking_info || {};
+                
+                // Add bot message to chat
+                addMessage(data.message, 'bot');
+                
+                // Check if appointments data is returned
+                if (data.appointments && data.appointments.length > 0) {
+                    displayAppointments(data.appointments);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                addMessage('Sorry, there was an error processing your request.', 'bot');
+            });
+        }
+        
+        // Add message to chat
+        function addMessage(message, sender) {
+            const messagesContainer = document.getElementById('chat-messages');
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('message');
+            messageElement.classList.add(sender === 'user' ? 'user-message' : 'bot-message');
+            
+            // Format message with proper line breaks
+            const formattedMessage = document.createElement('pre');
+            formattedMessage.textContent = message;
+            formattedMessage.style.margin = '0';
+            formattedMessage.style.fontFamily = 'inherit';
+            formattedMessage.style.background = 'transparent';
+            
+            messageElement.appendChild(formattedMessage);
+            messagesContainer.appendChild(messageElement);
+            
+            // Scroll to bottom
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+        
+        // Display appointments in a table
+        function displayAppointments(appointments) {
+            const messagesContainer = document.getElementById('chat-messages');
+            const tableContainer = document.createElement('div');
+            tableContainer.classList.add('message', 'bot-message');
+            
+            // Create table
+            const table = document.createElement('table');
+            table.classList.add('appointments-table');
+            
+            // Add table header
+            const thead = document.createElement('thead');
+            const headerRow = document.createElement('tr');
+            ['Name', 'Email', 'Date', 'Time', 'Purpose'].forEach(header => {
+                const th = document.createElement('th');
+                th.textContent = header;
+                headerRow.appendChild(th);
+            });
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
+            
+            // Add table body with appointments
+            const tbody = document.createElement('tbody');
+            appointments.forEach(appointment => {
+                const row = document.createElement('tr');
+                
+                ['name', 'email', 'date', 'time', 'purpose'].forEach(field => {
+                    const td = document.createElement('td');
+                    td.textContent = appointment[field];
+                    row.appendChild(td);
+                });
+                
+                tbody.appendChild(row);
+            });
+            table.appendChild(tbody);
+            
+            tableContainer.appendChild(table);
+            messagesContainer.appendChild(tableContainer);
+            
+            // Scroll to bottom
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+        
+        // Reset chat
+        function resetChat() {
+            fetch('/api/reset', {
+                method: 'POST',
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Clear chat messages
+                document.getElementById('chat-messages').innerHTML = '';
+                
+                // Update state and booking info
+                currentState = data.state;
+                bookingInfo = data.booking_info || {};
+                
+                // Add welcome message
+                addMessage(data.message, 'bot');
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        }
     </script>
 </body>
 </html>
