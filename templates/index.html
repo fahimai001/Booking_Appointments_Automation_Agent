@@ -1,263 +1,91 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Appointment Booking Assistant</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body {
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-        
-        .chat-container {
-            max-width: 700px;
-            margin: 0 auto;
-            background-color: white;
-            border-radius: 10px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-            overflow: hidden;
-        }
-        
-        .chat-header {
-            background-color: #007bff;
-            color: white;
-            padding: 15px;
-            text-align: center;
-        }
-        
-        .chat-messages {
-            height: 400px;
-            overflow-y: auto;
-            padding: 15px;
-        }
-        
-        .message {
-            margin-bottom: 15px;
-            padding: 10px;
-            border-radius: 5px;
-            max-width: 80%;
-        }
-        
-        .user-message {
-            background-color: #007bff;
-            color: white;
-            margin-left: auto;
-        }
-        
-        .bot-message {
-            background-color: #e9ecef;
-            color: #212529;
-        }
-        
-        .chat-input {
-            display: flex;
-            padding: 15px;
-            border-top: 1px solid #dee2e6;
-        }
-        
-        .chat-input input {
-            flex-grow: 1;
-            padding: 10px;
-            border: 1px solid #ced4da;
-            border-radius: 5px 0 0 5px;
-        }
-        
-        .chat-input button {
-            padding: 10px 15px;
-            background-color: #007bff;
-            color: white;
-            border: none;
-            border-radius: 0 5px 5px 0;
-            cursor: pointer;
-        }
-        
-        .appointments-table {
-            width: 100%;
-            margin-top: 15px;
-            border-collapse: collapse;
-        }
-        
-        .appointments-table th, .appointments-table td {
-            border: 1px solid #dee2e6;
-            padding: 8px;
-            text-align: left;
-        }
-        
-        .appointments-table th {
-            background-color: #f8f9fa;
-        }
-        
-        pre {
-            white-space: pre-wrap;
-            word-wrap: break-word;
-        }
-    </style>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+    <title>📅 AI Appointment Booking</title>
 </head>
 <body>
-    <div class="container">
-        <div class="chat-container">
-            <div class="chat-header">
-                <h2>Appointment Booking Assistant</h2>
-            </div>
-            <div class="chat-messages" id="chat-messages">
-                <!-- Messages will be added here dynamically -->
-            </div>
-            <div class="chat-input">
-                <input type="text" id="user-input" placeholder="Type your message...">
-                <button id="send-button">Send</button>
-            </div>
-        </div>
-    </div>
+  <div class="container">
+    <h1>📅 AI Appointment Booking Assistant</h1>
 
-    <script>
-        let currentState = 'choosing';
-        let bookingInfo = {};
-        
-        // Initialize chat
-        document.addEventListener('DOMContentLoaded', function() {
-            resetChat();
-            
-            // Send message when button is clicked
-            document.getElementById('send-button').addEventListener('click', sendMessage);
-            
-            // Send message when Enter is pressed
-            document.getElementById('user-input').addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    sendMessage();
-                }
-            });
-        });
-        
-        // Send user message to backend
-        function sendMessage() {
-            const userInput = document.getElementById('user-input').value.trim();
-            if (!userInput) return;
-            
-            // Add user message to chat
-            addMessage(userInput, 'user');
-            
-            // Clear input field
-            document.getElementById('user-input').value = '';
-            
-            // Send request to backend
-            fetch('/api/chat', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    message: userInput,
-                    state: currentState,
-                    booking_info: bookingInfo
-                }),
-            })
-            .then(response => response.json())
-            .then(data => {
-                // Update state and booking info
-                currentState = data.state;
-                bookingInfo = data.booking_info || {};
-                
-                // Add bot message to chat
-                addMessage(data.message, 'bot');
-                
-                // Check if appointments data is returned
-                if (data.appointments && data.appointments.length > 0) {
-                    displayAppointments(data.appointments);
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                addMessage('Sorry, there was an error processing your request.', 'bot');
-            });
-        }
-        
-        // Add message to chat
-        function addMessage(message, sender) {
-            const messagesContainer = document.getElementById('chat-messages');
-            const messageElement = document.createElement('div');
-            messageElement.classList.add('message');
-            messageElement.classList.add(sender === 'user' ? 'user-message' : 'bot-message');
-            
-            // Format message with proper line breaks
-            const formattedMessage = document.createElement('pre');
-            formattedMessage.textContent = message;
-            formattedMessage.style.margin = '0';
-            formattedMessage.style.fontFamily = 'inherit';
-            formattedMessage.style.background = 'transparent';
-            
-            messageElement.appendChild(formattedMessage);
-            messagesContainer.appendChild(messageElement);
-            
-            // Scroll to bottom
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        }
-        
-        // Display appointments in a table
-        function displayAppointments(appointments) {
-            const messagesContainer = document.getElementById('chat-messages');
-            const tableContainer = document.createElement('div');
-            tableContainer.classList.add('message', 'bot-message');
-            
-            // Create table
-            const table = document.createElement('table');
-            table.classList.add('appointments-table');
-            
-            // Add table header
-            const thead = document.createElement('thead');
-            const headerRow = document.createElement('tr');
-            ['Name', 'Email', 'Date', 'Time', 'Purpose'].forEach(header => {
-                const th = document.createElement('th');
-                th.textContent = header;
-                headerRow.appendChild(th);
-            });
-            thead.appendChild(headerRow);
-            table.appendChild(thead);
-            
-            // Add table body with appointments
-            const tbody = document.createElement('tbody');
-            appointments.forEach(appointment => {
-                const row = document.createElement('tr');
-                
-                ['name', 'email', 'date', 'time', 'purpose'].forEach(field => {
-                    const td = document.createElement('td');
-                    td.textContent = appointment[field];
-                    row.appendChild(td);
-                });
-                
-                tbody.appendChild(row);
-            });
-            table.appendChild(tbody);
-            
-            tableContainer.appendChild(table);
-            messagesContainer.appendChild(tableContainer);
-            
-            // Scroll to bottom
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        }
-        
-        // Reset chat
-        function resetChat() {
-            fetch('/api/reset', {
-                method: 'POST',
-            })
-            .then(response => response.json())
-            .then(data => {
-                // Clear chat messages
-                document.getElementById('chat-messages').innerHTML = '';
-                
-                // Update state and booking info
-                currentState = data.state;
-                bookingInfo = data.booking_info || {};
-                
-                // Add welcome message
-                addMessage(data.message, 'bot');
-            })
-            .catch(error => {
-                console.error('Error:', error);
-            });
-        }
-    </script>
+    {% if not action %}
+      <p class="greeting">How can I help you today?</p>
+      <div class="options">
+        <a class="btn" href="/?action=book">Book an Appointment</a>
+        <a class="btn" href="/?action=check">Check Existing Appointment</a>
+      </div>
+    {% endif %}
+
+    {% if action == 'book' %}
+      <h2>Book a New Appointment</h2>
+
+      {% if error %}
+        <div class="alert error">❌ {{ error }}</div>
+      {% endif %}
+      {% if missing %}
+        <div class="alert warning">⚠️ Missing fields: {{ missing | join(', ') }}</div>
+      {% endif %}
+      {% if invalid %}
+        <div class="alert warning">⚠️ Invalid entries: {{ invalid | join(', ') }}</div>
+      {% endif %}
+      {% if confirmation %}
+        <div class="alert success">
+          ✅ Appointment confirmed for <strong>{{ confirmation.name }}</strong> on <strong>{{ confirmation.date }}</strong> at <strong>{{ confirmation.time }}</strong>.<br />
+          Purpose: <em>{{ confirmation.purpose }}</em>
+        </div>
+      {% endif %}
+
+      <form action="/book" method="POST" novalidate>
+        <input type="text" name="name" placeholder="Name" value="{{ booking_info.name if booking_info }}" required autocomplete="name" />
+        <input type="email" name="email" placeholder="Email" value="{{ booking_info.email if booking_info }}" required autocomplete="email" />
+        <input type="date" name="date" value="{{ booking_info.date if booking_info }}" required />
+        <input type="time" name="time" value="{{ booking_info.time if booking_info }}" required />
+        <input type="text" name="purpose" placeholder="Purpose" value="{{ booking_info.purpose if booking_info }}" required autocomplete="off" />
+        <button type="submit">Submit Booking</button>
+        <a class="link" href="/">← Back</a>
+      </form>
+    {% endif %}
+
+    {% if action == 'check' %}
+      <h2>Check Your Appointments</h2>
+
+      <form action="/check" method="POST" novalidate>
+        <input type="email" name="check_email" placeholder="Enter your email" value="{{ check_email if check_email }}" required autocomplete="email" />
+        <button type="submit">Find Appointments</button>
+        <a class="link" href="/">← Back</a>
+      </form>
+
+      {% if appointments is defined %}
+        {% if not_found %}
+          <div class="alert warning">⚠️ No appointments found for <strong>{{ check_email }}</strong>.</div>
+        {% else %}
+          <div class="appointments-list">
+            <h3>Appointments for <span class="highlight-email">{{ check_email }}</span>:</h3>
+            <table class="appointments-table" aria-label="Appointments list">
+              <thead>
+                <tr>
+                  <th scope="col">Date</th>
+                  <th scope="col">Time</th>
+                  <th scope="col">Purpose</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for app in appointments %}
+                  <tr>
+                    <td>{{ app.date }}</td>
+                    <td>{{ app.time }}</td>
+                    <td>{{ app.purpose }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
+      {% endif %}
+    {% endif %}
+
+  </div>
 </body>
 </html>
