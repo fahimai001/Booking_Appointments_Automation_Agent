@@ -1,4 +1,6 @@
-![Dashboard Preview](agent.png)
+![Dashboard Preview](page-1.png)
+![Dashboard Preview](page-2.png)
+![Dashboard Preview](page-3.png)
 
 # AI Appointment Booking Assistant
 
