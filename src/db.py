@@ -5,7 +5,6 @@ from datetime import datetime
 
 def setup_database():
     """Set up the appointments database if it doesn't exist."""
-    # Ensure database directory exists
     os.makedirs('database', exist_ok=True)
     
     conn = sqlite3.connect('database/appointments.db')
@@ -40,11 +39,9 @@ def is_duplicate_appointment(email: str, date: str, time: str) -> bool:
 def store_appointment(name: str, email: str, date: str, time: str, purpose: str) -> Tuple[bool, str]:
     """Store an appointment in the database."""
     try:
-        # Validate all required fields
         if not all([name, email, date, time, purpose]):
             return False, "Missing required information"
         
-        # Check for duplicate appointment
         if is_duplicate_appointment(email, date, time):
             return False, "duplicate"
         

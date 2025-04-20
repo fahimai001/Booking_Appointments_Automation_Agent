@@ -7,13 +7,11 @@ setup_database()
 
 @app.route('/', methods=['GET'])
 def index():
-    # Determine flow: None, 'book', or 'check'
     action = request.args.get('action')
     return render_template('index.html', action=action)
 
 @app.route('/book', methods=['POST'])
 def book():
-    # Gather form data
     name = request.form.get('name')
     email = request.form.get('email')
     date = request.form.get('date')
@@ -39,7 +37,6 @@ def book():
 def check():
     email = request.form.get('check_email')
     appointments = get_appointments_by_email(email)
-    # If none found, pass flag
     not_found = not appointments
     return render_template('index.html', action='check', appointments=appointments,
                            check_email=email, not_found=not_found)
