@@ -5,7 +5,6 @@ from typing import Dict, List, Optional, Any, Tuple
 
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
 
 load_dotenv()
@@ -49,7 +48,8 @@ prompt = PromptTemplate(
     template=appointment_prompt_template
 )
 
-appointment_chain = LLMChain(llm=llm, prompt=prompt)
+# Updated chain using Runnable interface
+appointment_chain = prompt | llm
 
 def extract_email(text: str) -> str:
     """Extract email from user input."""
@@ -143,11 +143,12 @@ def get_llm_response(state, user_input, booking_info=None):
     else:
         user_info = "No booking information available yet"
 
-    response = appointment_chain.run(
-        current_state=state,
-        user_info=user_info,
-        user_input=user_input
-    )
+    # Updated invocation pattern
+    response = appointment_chain.invoke({
+        "current_state": state,
+        "user_info": user_info,
+        "user_input": user_input
+    }).content
 
     return response.strip()
 
