@@ -1,91 +1,209 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
-    <title>📅 AI Appointment Booking</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Appointment Booking Assistant</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f5f7fa;
+            font-family: 'Arial', sans-serif;
+        }
+        .chat-container {
+            max-width: 800px;
+            margin: 30px auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        .chat-header {
+            background-color: #4e73df;
+            color: white;
+            padding: 15px 20px;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+        .chat-messages {
+            height: 400px;
+            overflow-y: auto;
+            padding: 20px;
+        }
+        .message {
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            border-radius: 15px;
+            max-width: 80%;
+            position: relative;
+            clear: both;
+        }
+        .user-message {
+            background-color: #e6f2ff;
+            color: #333;
+            float: right;
+            border-bottom-right-radius: 5px;
+        }
+        .assistant-message {
+            background-color: #f0f0f0;
+            color: #333;
+            float: left;
+            border-bottom-left-radius: 5px;
+        }
+        .message-input {
+            padding: 15px;
+            border-top: 1px solid #e9e9e9;
+            background-color: white;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 10px 0;
+            color: #666;
+        }
+        .loading-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #666;
+            margin: 0 3px;
+            animation: wave 1.3s linear infinite;
+        }
+        .loading-dot:nth-child(2) {
+            animation-delay: -1.1s;
+        }
+        .loading-dot:nth-child(3) {
+            animation-delay: -0.9s;
+        }
+        @keyframes wave {
+            0%, 60%, 100% {
+                transform: initial;
+            }
+            30% {
+                transform: translateY(-10px);
+            }
+        }
+        .message p {
+            margin-bottom: 0;
+        }
+        /* For markdown content */
+        .assistant-message strong {
+            font-weight: bold;
+        }
+    </style>
 </head>
 <body>
-  <div class="container">
-    <h1>📅 AI Appointment Booking Assistant</h1>
-
-    {% if not action %}
-      <p class="greeting">How can I help you today?</p>
-      <div class="options">
-        <a class="btn" href="/?action=book">Book an Appointment</a>
-        <a class="btn" href="/?action=check">Check Existing Appointment</a>
-      </div>
-    {% endif %}
-
-    {% if action == 'book' %}
-      <h2>Book a New Appointment</h2>
-
-      {% if error %}
-        <div class="alert error">❌ {{ error }}</div>
-      {% endif %}
-      {% if missing %}
-        <div class="alert warning">⚠️ Missing fields: {{ missing | join(', ') }}</div>
-      {% endif %}
-      {% if invalid %}
-        <div class="alert warning">⚠️ Invalid entries: {{ invalid | join(', ') }}</div>
-      {% endif %}
-      {% if confirmation %}
-        <div class="alert success">
-          ✅ Appointment confirmed for <strong>{{ confirmation.name }}</strong> on <strong>{{ confirmation.date }}</strong> at <strong>{{ confirmation.time }}</strong>.<br />
-          Purpose: <em>{{ confirmation.purpose }}</em>
+    <div class="container">
+        <div class="chat-container">
+            <div class="chat-header">
+                AI Appointment Assistant
+            </div>
+            <div class="chat-messages" id="chat-messages">
+                <!-- Chat messages will be inserted here -->
+                <div class="message assistant-message">
+                    <p>Hello! 👋 I am your assistant and I can help you book an appointment or check existing appointments. How can I assist you today?</p>
+                </div>
+            </div>
+            <div class="loading" id="loading">
+                <div class="loading-dot"></div>
+                <div class="loading-dot"></div>
+                <div class="loading-dot"></div>
+            </div>
+            <div class="message-input">
+                <form id="message-form">
+                    <div class="input-group">
+                        <input type="text" id="user-input" class="form-control" placeholder="Type your message here..." required>
+                        <button class="btn btn-primary" type="submit">Send</button>
+                    </div>
+                </form>
+            </div>
         </div>
-      {% endif %}
+    </div>
 
-      <form action="/book" method="POST" novalidate>
-        <input type="text" name="name" placeholder="Name" value="{{ booking_info.name if booking_info }}" required autocomplete="name" />
-        <input type="email" name="email" placeholder="Email" value="{{ booking_info.email if booking_info }}" required autocomplete="email" />
-        <input type="date" name="date" value="{{ booking_info.date if booking_info }}" required />
-        <input type="time" name="time" value="{{ booking_info.time if booking_info }}" required />
-        <input type="text" name="purpose" placeholder="Purpose" value="{{ booking_info.purpose if booking_info }}" required autocomplete="off" />
-        <button type="submit">Submit Booking</button>
-        <a class="link" href="/">← Back</a>
-      </form>
-    {% endif %}
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const messageForm = document.getElementById('message-form');
+            const userInput = document.getElementById('user-input');
+            const chatMessages = document.getElementById('chat-messages');
+            const loadingIndicator = document.getElementById('loading');
+            let conversationHistory = [];
 
-    {% if action == 'check' %}
-      <h2>Check Your Appointments</h2>
+            // Initial greeting
+            conversationHistory.push({
+                role: 'assistant',
+                content: 'Hello! 👋 I am your assistant and I can help you book an appointment or check existing appointments. How can I assist you today?'
+            });
 
-      <form action="/check" method="POST" novalidate>
-        <input type="email" name="check_email" placeholder="Enter your email" value="{{ check_email if check_email }}" required autocomplete="email" />
-        <button type="submit">Find Appointments</button>
-        <a class="link" href="/">← Back</a>
-      </form>
+            messageForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                const message = userInput.value.trim();
+                if (!message) return;
+                
+                // Add user message to UI
+                addMessage('user', message);
+                
+                // Add to conversation history
+                conversationHistory.push({
+                    role: 'user',
+                    content: message
+                });
+                
+                // Clear input
+                userInput.value = '';
+                
+                // Show loading indicator
+                loadingIndicator.style.display = 'block';
+                
+                try {
+                    // Send message to backend
+                    const response = await fetch('/api/message', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            message: message,
+                            history: conversationHistory
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    // Add assistant response to UI
+                    addMessage('assistant', data.content);
+                    
+                    // Add to conversation history
+                    conversationHistory.push({
+                        role: 'assistant',
+                        content: data.content
+                    });
+                } catch (error) {
+                    console.error('Error:', error);
+                    addMessage('assistant', 'Sorry, there was an error processing your request.');
+                } finally {
+                    // Hide loading indicator
+                    loadingIndicator.style.display = 'none';
+                    
+                    // Scroll to bottom
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+            });
 
-      {% if appointments is defined %}
-        {% if not_found %}
-          <div class="alert warning">⚠️ No appointments found for <strong>{{ check_email }}</strong>.</div>
-        {% else %}
-          <div class="appointments-list">
-            <h3>Appointments for <span class="highlight-email">{{ check_email }}</span>:</h3>
-            <table class="appointments-table" aria-label="Appointments list">
-              <thead>
-                <tr>
-                  <th scope="col">Date</th>
-                  <th scope="col">Time</th>
-                  <th scope="col">Purpose</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for app in appointments %}
-                  <tr>
-                    <td>{{ app.date }}</td>
-                    <td>{{ app.time }}</td>
-                    <td>{{ app.purpose }}</td>
-                  </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        {% endif %}
-      {% endif %}
-    {% endif %}
-
-  </div>
+            function addMessage(role, content) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${role}-message`;
+                
+                // Convert markdown to HTML
+                const parsedContent = marked.parse(content);
+                messageDiv.innerHTML = parsedContent;
+                
+                chatMessages.appendChild(messageDiv);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+        });
+    </script>
 </body>
 </html>
