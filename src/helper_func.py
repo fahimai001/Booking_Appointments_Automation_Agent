@@ -1,5 +1,19 @@
+# src/helper_func.py
+
+import os
 import re
+import smtplib
 from datetime import datetime
+from email.message import EmailMessage
+from dotenv import load_dotenv
+
+# ─── Load all environment vars (including SMTP_HOST, SMTP_PORT, etc.) ───
+load_dotenv()
+
+SMTP_HOST = os.getenv("SMTP_HOST")
+SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
+EMAIL_USER = os.getenv("EMAIL_USER")
+EMAIL_PASS = os.getenv("EMAIL_PASS")
 
 def has_booking_intent(text: str) -> bool:
     booking_indicators = ["book", "schedule", "make", "set", "create", "arrange", "new appointment"]
@@ -52,3 +66,31 @@ def standardize_time(time_str: str) -> str:
             hour = 0
         return f"{hour:02d}:00"
     return time_str
+
+def send_email(to_address: str, subject: str, body: str) -> None:
+    """
+    Send an email via SMTP using credentials from your .env.
+    Raises exception if sending fails.
+    """
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = EMAIL_USER
+    msg["To"] = to_address
+    msg.set_content(body)
+
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as smtp:
+        smtp.starttls()
+        smtp.login(EMAIL_USER, EMAIL_PASS)
+        smtp.send_message(msg)
+
+def make_confirmation_message(name: str, date: str, time: str, purpose: str) -> str:
+    """Builds the plain-text body for the confirmation email."""
+    return (
+        f"Hi {name},\n\n"
+        f"Your appointment has been booked successfully! 📅⏰\n\n"
+        f"— Date: {date}\n"
+        f"— Time: {time}\n"
+        f"— Purpose: {purpose}\n\n"
+        "If you need to reschedule or cancel, just reply to this email.\n\n"
+        "Thank you and have a great day!\n"
+    )

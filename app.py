@@ -1,3 +1,5 @@
+# src/app.py
+
 from flask import Flask, render_template, request, jsonify
 import os
 import time
@@ -5,9 +7,14 @@ from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.tools import tool
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from src.db import setup_database, store_appointment, get_appointments_by_email
-from src.helper_func import is_valid_email, is_valid_date, is_valid_time, standardize_time
 
+from src.db import setup_database, store_appointment, get_appointments_by_email
+from src.helper_func import (
+    is_valid_email, is_valid_date, is_valid_time, standardize_time,
+    send_email, make_confirmation_message
+)
+
+# ─── Load .env (for GEMINI_API_KEY, SMTP_*, etc.) ───
 load_dotenv()
 
 setup_database()
@@ -16,7 +23,8 @@ app = Flask(__name__)
 
 @tool
 def book_appointment(name: str, email: str, date: str, time: str, purpose: str) -> str:
-    """Book an appointment with the provided details."""
+    """Book an appointment and email the user a confirmation."""
+    # 1. Validate inputs
     if not all([name, email, date, time, purpose]):
         return "Missing required information. Please provide all details."
     if not is_valid_email(email):
@@ -25,12 +33,27 @@ def book_appointment(name: str, email: str, date: str, time: str, purpose: str) 
         return "Invalid date or date is in the past. Please use DD/MM/YYYY format."
     if not is_valid_time(time):
         return "Invalid time format. Please use HH:MM or H AM/PM."
-    standardized_time = standardize_time(time)
-    success, msg = store_appointment(name, email, date, standardized_time, purpose)
-    if success:
-        return f"Appointment booked successfully for {name} on {date} at {standardized_time} for {purpose}."
-    else:
+    std_time = standardize_time(time)
+
+    # 2. Store in DB
+    success, msg = store_appointment(name, email, date, std_time, purpose)
+    if not success:
         return f"Failed to book appointment: {msg}"
+
+    # 3. Send confirmation email
+    try:
+        subject = "Your Appointment Confirmation"
+        body = make_confirmation_message(name, date, std_time, purpose)
+        send_email(to_address=email, subject=subject, body=body)
+    except Exception as e:
+        # Log failure but still confirm booking to user
+        app.logger.error(f"Email send error for {email}: {e}")
+
+    # 4. Return chat confirmation
+    return (
+        f"✅ Appointment booked for **{name}** on **{date}** at **{std_time}** "
+        f"for **{purpose}**. A confirmation email has been sent to {email}."
+    )
 
 @tool
 def check_appointments(email: str) -> str:
@@ -41,11 +64,11 @@ def check_appointments(email: str) -> str:
     if not appointments:
         return "No appointments found for this email."
     response = "**Your Appointments:**\n\n"
-    for i, app in enumerate(appointments, 1):
+    for i, appnt in enumerate(appointments, 1):
         response += f"**Appointment {i}:**\n"
-        response += f"- **Date:** {app['date']}\n"
-        response += f"- **Time:** {app['time']}\n"
-        response += f"- **Purpose:** {app['purpose']}\n\n"
+        response += f"- **Date:** {appnt['date']}\n"
+        response += f"- **Time:** {appnt['time']}\n"
+        response += f"- **Purpose:** {appnt['purpose']}\n\n"
     return response.strip()
 
 def get_llm():
@@ -62,21 +85,17 @@ system_message = SystemMessage(content="""
 You are an AI Appointment Booking Assistant. Your task is to help users book appointments or check existing appointments.
 
 # NEW: handle user greetings
-At the very start of the conversation, if the user only greets you (e.g., "Hi", "Hello", "Hey"), respond with a friendly greeting and ask how you can help, for example:
-    "Hello there! 😊 How can I assist you with your appointments today?"
-Do not jump straight into booking until they specify what they’d like to do.
+At the very start of the conversation, if the user only greets you, respond with a friendly greeting and ask how you can help.
 
 For booking an appointment:
-- Collect the user's full name, email, date (DD/MM/YYYY), time, and purpose.
-- Ask for each piece of information naturally, one at a time, based on what the user has already provided.
-- Once all details are collected, use the book_appointment tool to store the appointment.
-- Present the details back to the user for confirmation after booking.
+- Collect name, email, date (DD/MM/YYYY), time, and purpose.
+- Ask one at a time, then call the book_appointment tool.
+- After booking, the user gets both a chat confirmation and an email.
 
 For checking appointments:
-- Ask for the user's email.
-- Use the check_appointments tool to retrieve and display the appointments.
+- Ask for email and call the check_appointments tool.
 
-Be concise, friendly, and use emojis (📅, ⏰, 📝) to make it engaging. If the user provides irrelevant information, gently guide them back to booking or checking appointments. Do not repeat the initial greeting unless it's the first message.
+Be concise, friendly, and use emojis to keep it engaging.
 """)
 
 @app.route('/')
@@ -87,37 +106,27 @@ def index():
 def process_message():
     data = request.json
     user_input = data.get('message', '')
-    conversation_history = data.get('history', [])
-    
+    history = data.get('history', [])
+
     messages = [system_message]
-    
-    for msg in conversation_history:
-        if msg['role'] == 'user':
-            messages.append(HumanMessage(content=msg['content']))
-        else:
-            messages.append(AIMessage(content=msg['content']))
-    
+    for msg in history:
+        messages.append(AIMessage(content=msg['content']) if msg['role']=='assistant'
+                        else HumanMessage(content=msg['content']))
     messages.append(HumanMessage(content=user_input))
-    
+
     time.sleep(0.5)
-    
     response = llm_with_tools.invoke(messages)
-    
+
     if response.tool_calls:
-        for tool_call in response.tool_calls:
-            tool_name = tool_call['name']
-            tool_args = tool_call['args']
-            
-            if tool_name == 'book_appointment':
-                result = book_appointment.invoke(tool_args)
-            elif tool_name == 'check_appointments':
-                result = check_appointments.invoke(tool_args)
+        for call in response.tool_calls:
+            if call['name']=='book_appointment':
+                result = book_appointment.invoke(call['args'])
+            elif call['name']=='check_appointments':
+                result = check_appointments.invoke(call['args'])
             else:
                 result = "Unknown tool."
-                
             return jsonify({'content': result})
-    else:
-        return jsonify({'content': response.content})
+    return jsonify({'content': response.content})
 
 if __name__ == '__main__':
     app.run(debug=True)
