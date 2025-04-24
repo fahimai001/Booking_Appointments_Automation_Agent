@@ -1,5 +1,3 @@
-# src/helper_func.py
-
 import os
 import re
 import smtplib
@@ -7,7 +5,6 @@ from datetime import datetime
 from email.message import EmailMessage
 from dotenv import load_dotenv
 
-# ─── Load all environment vars (including SMTP_HOST, SMTP_PORT, etc.) ───
 load_dotenv()
 
 SMTP_HOST = os.getenv("SMTP_HOST")
@@ -15,16 +12,20 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
 EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_PASS = os.getenv("EMAIL_PASS")
 
+
 def has_booking_intent(text: str) -> bool:
     booking_indicators = ["book", "schedule", "make", "set", "create", "arrange", "new appointment"]
     return any(indicator.lower() in text.lower() for indicator in booking_indicators)
+
 
 def has_checking_intent(text: str) -> bool:
     checking_indicators = ["check", "get", "show", "list", "find", "view", "see", "retrieve"]
     return any(indicator.lower() in text.lower() for indicator in checking_indicators)
 
+
 def is_valid_email(email: str) -> bool:
     return bool(re.match(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", email))
+
 
 def is_valid_date(date_str: str) -> bool:
     date_patterns = [r"^(\d{1,2})/(\d{1,2})/(\d{4})$"]
@@ -36,6 +37,7 @@ def is_valid_date(date_str: str) -> bool:
     except ValueError:
         return False
 
+
 def is_valid_time(time_str: str) -> bool:
     time_patterns = [
         r"^([01]?[0-9]|2[0-3]):([0-5][0-9])$",
@@ -43,6 +45,7 @@ def is_valid_time(time_str: str) -> bool:
         r"^(1[0-2]|0?[1-9])\s?(AM|PM|am|pm)$"
     ]
     return any(re.match(pattern, time_str) for pattern in time_patterns)
+
 
 def standardize_time(time_str: str) -> str:
     if re.match(r"^([01]?[0-9]|2[0-3]):([0-5][0-9])$", time_str):
@@ -56,6 +59,7 @@ def standardize_time(time_str: str) -> str:
         elif period.lower() == "am" and hour == 12:
             hour = 0
         return f"{hour:02d}:{minute}"
+    
     match = re.match(r"^(1[0-2]|0?[1-9])\s?(AM|PM|am|pm)$", time_str)
     if match:
         hour, period = match.groups()
@@ -66,6 +70,7 @@ def standardize_time(time_str: str) -> str:
             hour = 0
         return f"{hour:02d}:00"
     return time_str
+
 
 def send_email(to_address: str, subject: str, body: str) -> None:
     """
@@ -78,10 +83,12 @@ def send_email(to_address: str, subject: str, body: str) -> None:
     msg["To"] = to_address
     msg.set_content(body)
 
+
     with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as smtp:
         smtp.starttls()
         smtp.login(EMAIL_USER, EMAIL_PASS)
         smtp.send_message(msg)
+
 
 def make_confirmation_message(name: str, date: str, time: str, purpose: str) -> str:
     """Builds the plain-text body for the confirmation email."""

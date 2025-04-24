@@ -1,5 +1,3 @@
-# src/app.py
-
 from flask import Flask, render_template, request, jsonify
 import os
 import time
@@ -14,7 +12,6 @@ from src.helper_func import (
     send_email, make_confirmation_message
 )
 
-# ─── Load .env (for GEMINI_API_KEY, SMTP_*, etc.) ───
 load_dotenv()
 
 setup_database()
@@ -24,45 +21,53 @@ app = Flask(__name__)
 @tool
 def book_appointment(name: str, email: str, date: str, time: str, purpose: str) -> str:
     """Book an appointment and email the user a confirmation."""
-    # 1. Validate inputs
+
     if not all([name, email, date, time, purpose]):
         return "Missing required information. Please provide all details."
+    
     if not is_valid_email(email):
         return "Invalid email address. Please provide a valid email."
+    
     if not is_valid_date(date):
         return "Invalid date or date is in the past. Please use DD/MM/YYYY format."
+    
     if not is_valid_time(time):
         return "Invalid time format. Please use HH:MM or H AM/PM."
+    
     std_time = standardize_time(time)
 
-    # 2. Store in DB
     success, msg = store_appointment(name, email, date, std_time, purpose)
     if not success:
         return f"Failed to book appointment: {msg}"
 
-    # 3. Send confirmation email
     try:
         subject = "Your Appointment Confirmation"
         body = make_confirmation_message(name, date, std_time, purpose)
         send_email(to_address=email, subject=subject, body=body)
     except Exception as e:
-        # Log failure but still confirm booking to user
+
         app.logger.error(f"Email send error for {email}: {e}")
 
-    # 4. Return chat confirmation
     return (
         f"✅ Appointment booked for **{name}** on **{date}** at **{std_time}** "
         f"for **{purpose}**. A confirmation email has been sent to {email}."
     )
 
+
 @tool
 def check_appointments(email: str) -> str:
     """Check appointments for the given email."""
+
+
     if not is_valid_email(email):
         return "Invalid email address. Please provide a valid email."
+    
+
     appointments = get_appointments_by_email(email)
     if not appointments:
         return "No appointments found for this email."
+    
+
     response = "**Your Appointments:**\n\n"
     for i, appnt in enumerate(appointments, 1):
         response += f"**Appointment {i}:**\n"
@@ -71,6 +76,7 @@ def check_appointments(email: str) -> str:
         response += f"- **Purpose:** {appnt['purpose']}\n\n"
     return response.strip()
 
+
 def get_llm():
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.0-flash",
@@ -78,6 +84,7 @@ def get_llm():
         temperature=0.1
     )
     return llm.bind_tools([book_appointment, check_appointments])
+
 
 llm_with_tools = get_llm()
 
@@ -98,9 +105,11 @@ For checking appointments:
 Be concise, friendly, and use emojis to keep it engaging.
 """)
 
+
 @app.route('/')
 def index():
     return render_template('index.html')
+
 
 @app.route('/api/message', methods=['POST'])
 def process_message():
@@ -108,14 +117,17 @@ def process_message():
     user_input = data.get('message', '')
     history = data.get('history', [])
 
+
     messages = [system_message]
     for msg in history:
         messages.append(AIMessage(content=msg['content']) if msg['role']=='assistant'
                         else HumanMessage(content=msg['content']))
     messages.append(HumanMessage(content=user_input))
 
+
     time.sleep(0.5)
     response = llm_with_tools.invoke(messages)
+
 
     if response.tool_calls:
         for call in response.tool_calls:
