@@ -101,3 +101,14 @@ def make_confirmation_message(name: str, date: str, time: str, purpose: str) -> 
         "If you need to reschedule or cancel, just reply to this email.\n\n"
         "Thank you and have a great day!\n"
     )
+
+def make_cancellation_message(email: str, count: int) -> str:
+    """Builds the plain-text body for the cancellation email."""
+    return (
+        f"Hi there,\n\n"
+        f"Your {count} appointment{'s' if count > 1 else ''} linked to {email} "
+        f"{'have' if count > 1 else 'has'} been successfully cancelled. ❌📅\n\n"
+        "If this was done in error or you wish to book new appointments, "
+        "please contact us or use our booking system again.\n\n"
+        "Thank you for using our service!\n"
+    )

@@ -82,3 +82,28 @@ def get_appointments_by_email(email: str) -> List[Dict]:
 
     print(f"Found {len(result)} appointments for {email}")
     return result
+
+def delete_appointments_by_email(email: str) -> Tuple[bool, int]:
+    """Delete all appointments for the given email."""
+    try:
+        conn = sqlite3.connect('database/appointments.db')
+        cursor = conn.cursor()
+        
+        # First, get the count of appointments to be deleted
+        cursor.execute("SELECT COUNT(*) FROM appointments WHERE email = ?", (email,))
+        count = cursor.fetchone()[0]
+        
+        if count == 0:
+            conn.close()
+            return False, 0
+        
+        # Then delete them
+        cursor.execute("DELETE FROM appointments WHERE email = ?", (email,))
+        conn.commit()
+        conn.close()
+        
+        print(f"Successfully deleted {count} appointments for {email}")
+        return True, count
+    except Exception as e:
+        print(f"Error deleting appointments: {e}")
+        return False, 0

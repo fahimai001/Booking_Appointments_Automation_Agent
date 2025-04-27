@@ -6,10 +6,10 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.tools import tool
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-from src.db import setup_database, store_appointment, get_appointments_by_email
+from src.db import setup_database, store_appointment, get_appointments_by_email, delete_appointments_by_email
 from src.helper_func import (
     is_valid_email, is_valid_date, is_valid_time, standardize_time,
-    send_email, make_confirmation_message
+    send_email, make_confirmation_message, make_cancellation_message
 )
 
 load_dotenv()
@@ -76,6 +76,36 @@ def check_appointments(email: str) -> str:
         response += f"- **Purpose:** {appnt['purpose']}\n\n"
     return response.strip()
 
+@tool
+def cancel_appointment(email: str) -> str:
+    """Cancel all appointments for the given email."""
+    
+    if not is_valid_email(email):
+        return "Invalid email address. Please provide a valid email."
+    
+    # First check if there are any appointments
+    appointments = get_appointments_by_email(email)
+    if not appointments:
+        return "No appointments found for this email. Nothing to cancel."
+    
+    # Delete the appointments
+    success, count = delete_appointments_by_email(email)
+    if not success:
+        return "Failed to cancel appointments. Please try again."
+    
+    # Send cancellation email
+    try:
+        subject = "Your Appointment Cancellation"
+        body = make_cancellation_message(email, count)
+        send_email(to_address=email, subject=subject, body=body)
+    except Exception as e:
+        app.logger.error(f"Email send error for {email}: {e}")
+    
+    return (
+        f"❌ Successfully cancelled {count} appointment{'s' if count > 1 else ''} "
+        f"for **{email}**. A cancellation confirmation email has been sent."
+    )
+
 
 def get_llm():
     llm = ChatGoogleGenerativeAI(
@@ -83,13 +113,13 @@ def get_llm():
         google_api_key=os.environ["GEMINI_API_KEY"],
         temperature=0.1
     )
-    return llm.bind_tools([book_appointment, check_appointments])
+    return llm.bind_tools([book_appointment, check_appointments, cancel_appointment])
 
 
 llm_with_tools = get_llm()
 
 system_message = SystemMessage(content="""
-You are an AI Appointment Booking Assistant. Your task is to help users book appointments or check existing appointments.
+You are an AI Appointment Booking Assistant. Your task is to help users book appointments, check existing appointments, or cancel appointments.
 
 # NEW: handle user greetings
 At the very start of the conversation, if the user only greets you, respond with a friendly greeting and ask how you can help.
@@ -101,6 +131,11 @@ For booking an appointment:
 
 For checking appointments:
 - Ask for email and call the check_appointments tool.
+
+For cancelling appointments:
+- Ask for email only and call the cancel_appointment tool.
+- All appointments for that email will be cancelled.
+- After cancellation, the user gets both a chat confirmation and an email.
 
 Be concise, friendly, and use emojis to keep it engaging.
 """)
@@ -135,6 +170,8 @@ def process_message():
                 result = book_appointment.invoke(call['args'])
             elif call['name']=='check_appointments':
                 result = check_appointments.invoke(call['args'])
+            elif call['name']=='cancel_appointment':
+                result = cancel_appointment.invoke(call['args'])
             else:
                 result = "Unknown tool."
             return jsonify({'content': result})
