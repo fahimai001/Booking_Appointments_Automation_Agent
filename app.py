@@ -83,17 +83,14 @@ def cancel_appointment(email: str) -> str:
     if not is_valid_email(email):
         return "Invalid email address. Please provide a valid email."
     
-    # First check if there are any appointments
     appointments = get_appointments_by_email(email)
     if not appointments:
         return "No appointments found for this email. Nothing to cancel."
     
-    # Delete the appointments
     success, count = delete_appointments_by_email(email)
     if not success:
         return "Failed to cancel appointments. Please try again."
     
-    # Send cancellation email
     try:
         subject = "Your Appointment Cancellation"
         body = make_cancellation_message(email, count)
