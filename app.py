@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.tools import tool
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from src.zoom import create_meeting 
 
 from src.db import setup_database, store_appointment, get_appointments_by_email, delete_appointments_by_email
 from src.helper_func import (
@@ -76,6 +77,7 @@ def check_appointments(email: str) -> str:
         response += f"- **Purpose:** {appnt['purpose']}\n\n"
     return response.strip()
 
+
 @tool
 def cancel_appointment(email: str) -> str:
     """Cancel all appointments for the given email."""
@@ -104,6 +106,47 @@ def cancel_appointment(email: str) -> str:
     )
 
 
+
+@tool
+def book_appointment(name: str, email: str, date: str, time: str, purpose: str) -> str:
+    """Book an appointment and email the user a confirmation with a Zoom meeting link."""
+    if not all([name, email, date, time, purpose]):
+        return "Missing required information. Please provide all details."
+    
+    if not is_valid_email(email):
+        return "Invalid email address. Please provide a valid email."
+    
+    if not is_valid_date(date):
+        return "Invalid date or date is in the past. Please use DD/MM/YYYY format."
+    
+    if not is_valid_time(time):
+        return "Invalid time format. Please use HH:MM or H AM/PM."
+    
+    std_time = standardize_time(time)
+
+    success, msg = store_appointment(name, email, date, std_time, purpose)
+    if not success:
+        return f"Failed to book appointment: {msg}"
+
+    join_url = None
+    try:
+        join_url = create_meeting(date, std_time, purpose)
+    except Exception as e:
+        app.logger.error(f"Failed to create Zoom meeting: {e}")
+
+    try:
+        subject = "Your Appointment Confirmation"
+        body = make_confirmation_message(name, date, std_time, purpose, join_url)
+        send_email(to_address=email, subject=subject, body=body)
+    except Exception as e:
+        app.logger.error(f"Email send error for {email}: {e}")
+
+    return (
+        f"✅ Appointment booked for **{name}** on **{date}** at **{std_time}** "
+        f"for **{purpose}**. A confirmation email has been sent to {email}."
+    )
+
+
 def get_llm():
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.0-flash",
@@ -111,6 +154,7 @@ def get_llm():
         temperature=0.1
     )
     return llm.bind_tools([book_appointment, check_appointments, cancel_appointment])
+
 
 
 llm_with_tools = get_llm()
@@ -136,6 +180,7 @@ For cancelling appointments:
 
 Be concise, friendly, and use emojis to keep it engaging.
 """)
+
 
 
 @app.route('/')
