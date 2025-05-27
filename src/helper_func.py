@@ -13,16 +13,6 @@ EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_PASS = os.getenv("EMAIL_PASS")
 
 
-def has_booking_intent(text: str) -> bool:
-    booking_indicators = ["book", "schedule", "make", "set", "create", "arrange", "new appointment"]
-    return any(indicator.lower() in text.lower() for indicator in booking_indicators)
-
-
-def has_checking_intent(text: str) -> bool:
-    checking_indicators = ["check", "get", "show", "list", "find", "view", "see", "retrieve"]
-    return any(indicator.lower() in text.lower() for indicator in checking_indicators)
-
-
 def is_valid_email(email: str) -> bool:
     return bool(re.match(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", email))
 
@@ -90,17 +80,25 @@ def send_email(to_address: str, subject: str, body: str) -> None:
         smtp.send_message(msg)
 
 
-def make_confirmation_message(name: str, date: str, time: str, purpose: str) -> str:
-    """Builds the plain-text body for the confirmation email."""
-    return (
+from typing import Optional  # Add this to existing imports
+
+def make_confirmation_message(name: str, date: str, time: str, purpose: str, join_url: Optional[str] = None) -> str:
+    """Builds the plain-text body for the confirmation email with an optional Zoom link."""
+    message = (
         f"Hi {name},\n\n"
         f"Your appointment has been booked successfully! 📅⏰\n\n"
         f"— Date: {date}\n"
         f"— Time: {time}\n"
         f"— Purpose: {purpose}\n\n"
+    )
+    if join_url:
+        message += f"— Zoom Meeting Link: {join_url}\n\n"
+    message += (
         "If you need to reschedule or cancel, just reply to this email.\n\n"
         "Thank you and have a great day!\n"
     )
+    return message
+
 
 def make_cancellation_message(email: str, count: int) -> str:
     """Builds the plain-text body for the cancellation email."""
