@@ -19,41 +19,6 @@ setup_database()
 
 app = Flask(__name__)
 
-@tool
-def book_appointment(name: str, email: str, date: str, time: str, purpose: str) -> str:
-    """Book an appointment and email the user a confirmation."""
-
-    if not all([name, email, date, time, purpose]):
-        return "Missing required information. Please provide all details."
-    
-    if not is_valid_email(email):
-        return "Invalid email address. Please provide a valid email."
-    
-    if not is_valid_date(date):
-        return "Invalid date or date is in the past. Please use DD/MM/YYYY format."
-    
-    if not is_valid_time(time):
-        return "Invalid time format. Please use HH:MM or H AM/PM."
-    
-    std_time = standardize_time(time)
-
-    success, msg = store_appointment(name, email, date, std_time, purpose)
-    if not success:
-        return f"Failed to book appointment: {msg}"
-
-    try:
-        subject = "Your Appointment Confirmation"
-        body = make_confirmation_message(name, date, std_time, purpose)
-        send_email(to_address=email, subject=subject, body=body)
-    except Exception as e:
-
-        app.logger.error(f"Email send error for {email}: {e}")
-
-    return (
-        f"✅ Appointment booked for **{name}** on **{date}** at **{std_time}** "
-        f"for **{purpose}**. A confirmation email has been sent to {email}."
-    )
-
 
 @tool
 def check_appointments(email: str) -> str:
