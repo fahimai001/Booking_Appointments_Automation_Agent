@@ -80,7 +80,7 @@ def send_email(to_address: str, subject: str, body: str) -> None:
         smtp.send_message(msg)
 
 
-from typing import Optional  # Add this to existing imports
+from typing import Optional
 
 def make_confirmation_message(name: str, date: str, time: str, purpose: str, join_url: Optional[str] = None) -> str:
     """Builds the plain-text body for the confirmation email with an optional Zoom link."""
